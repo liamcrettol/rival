@@ -238,6 +238,7 @@ async function main() {
       source: "appwrite_recovery",
       raw_pgcr: null,
       status: "fetched",
+      last_error: null,
       fetched_at: file.$updatedAt || file.$createdAt || now,
       appwrite_sha256: sha256,
       appwrite_bytes: bytes.byteLength,

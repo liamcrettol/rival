@@ -17,6 +17,7 @@ function makeDb(rows: Row[], remaining = rows.length) {
         },
         not: () => builder,
         is: () => builder,
+        or: () => builder,
         order: () => builder,
         limit: async (limit: number) => ({ data: rows.slice(0, limit), error: null }),
         then: (resolve: (value: unknown) => void) => resolve(
@@ -80,5 +81,22 @@ describe("reconcilePendingPgcrs", () => {
 
     expect(result.failed).toBe(1);
     expect(result.failures[0]).toMatchObject({ instanceId: "9", kind: "guard_rejected" });
+  });
+
+  it("parks immutable Appwrite checksum conflicts so later runs do not retry forever", async () => {
+    const parkConflict = jest.fn(async () => undefined);
+    const archiveOne = jest.fn(async () => ({
+      archived: false,
+      cleared: false,
+      archiveError: { kind: "conflict", message: "different checksum" },
+    }));
+
+    const result = await reconcilePendingPgcrs(
+      {},
+      { db: makeDb([{ instance_id: "10" }], 0), archiveOne, parkConflict },
+    );
+
+    expect(result.failed).toBe(1);
+    expect(parkConflict).toHaveBeenCalledWith("10", "different checksum");
   });
 });

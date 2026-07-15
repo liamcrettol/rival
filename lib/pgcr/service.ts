@@ -311,6 +311,9 @@ export async function persistRawPgcr(
     ...options.extraFields,
     instance_id: instanceId,
     raw_pgcr: canonicalRawPgcr,
+    // A fresh source write re-opens any previously parked Appwrite checksum
+    // conflict so reconciliation can compare the new payload again.
+    last_error: null,
     // A new raw write invalidates any prior archive assertion. These fields
     // are deliberately after extraFields so callers cannot preserve or forge
     // stale verification metadata. The guarded RPC restores them only after

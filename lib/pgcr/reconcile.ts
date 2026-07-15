@@ -36,6 +36,7 @@ export interface ReconcileOptions {
 interface ReconcileDependencies {
   db?: Db;
   archiveOne?: (instanceId: string) => Promise<ArchiveOutcome>;
+  parkConflict?: (instanceId: string, message: string) => Promise<void>;
   now?: () => number;
 }
 
@@ -44,7 +45,8 @@ async function countPending(db: Db): Promise<number> {
     .from("pgcr_cache")
     .select("instance_id", { count: "exact", head: true })
     .not("raw_pgcr", "is", null)
-    .is("appwrite_migrated_at", null);
+    .is("appwrite_migrated_at", null)
+    .or("last_error.is.null,last_error.not.like.appwrite_conflict:%");
 
   if (error) throw new Error(`PGCR reconciliation count failed: ${error.message ?? error}`);
   return count ?? 0;
@@ -56,6 +58,7 @@ async function listPending(db: Db, limit: number): Promise<PendingArchiveRow[]> 
     .select("instance_id")
     .not("raw_pgcr", "is", null)
     .is("appwrite_migrated_at", null)
+    .or("last_error.is.null,last_error.not.like.appwrite_conflict:%")
     .order("fetched_at", { ascending: true, nullsFirst: true })
     .order("instance_id", { ascending: true })
     .limit(limit);
@@ -80,6 +83,15 @@ export async function reconcilePendingPgcrs(
   const now = dependencies.now ?? Date.now;
   const archiveOne = dependencies.archiveOne
     ?? ((instanceId: string) => archiveStoredRawPgcr(instanceId, { db }));
+  const parkConflict = dependencies.parkConflict ?? (async (instanceId: string, message: string) => {
+    const { error } = await db.from("pgcr_cache").update({
+      last_error: `appwrite_conflict:${message}`.slice(0, 1_000),
+      updated_at: new Date().toISOString(),
+    }).eq("instance_id", instanceId)
+      .not("raw_pgcr", "is", null)
+      .is("appwrite_migrated_at", null);
+    if (error) throw new Error(`PGCR conflict park failed: ${error.message ?? error}`);
+  });
   const startedAt = now();
   const rows = await listPending(db, limit);
   const failures: ReconcileFailure[] = [];
@@ -107,6 +119,9 @@ export async function reconcilePendingPgcrs(
         kind: outcome.archiveError?.kind ?? "guard_rejected",
         message: outcome.archiveError?.message ?? "The source payload changed while it was being archived.",
       });
+      if (outcome.archiveError?.kind === "conflict") {
+        await parkConflict(row.instance_id, outcome.archiveError.message);
+      }
     }
   }
 
