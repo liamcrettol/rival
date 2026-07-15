@@ -109,6 +109,50 @@ export async function upsertCrucibleMatchSource(source: CrucibleMatchSource, db:
   }), "player upsert");
 }
 
+export interface CrucibleViewerRows {
+  viewerRow: Record<string, unknown>;
+  encounterRows: Array<Record<string, unknown>>;
+}
+
+export function buildCrucibleViewerRows(
+  source: CrucibleMatchSource,
+  viewerUserId: string,
+  viewerMembershipId: string,
+): CrucibleViewerRows | null {
+  const { pgcr, modeBucket } = source;
+  const viewer = pgcr.players.find((player) => player.membershipId === viewerMembershipId);
+  if (!viewer) return null;
+
+  const viewerRow = {
+    viewer_user_id: viewerUserId,
+    viewer_membership_id: viewerMembershipId,
+    instance_id: pgcr.instanceId,
+    played_at: pgcr.period,
+  };
+
+  // Free-for-all and malformed reports do not expose a trustworthy opponent
+  // boundary. Keep the viewer marker, but never invent head-to-head records.
+  if (viewer.team === null) return { viewerRow, encounterRows: [] };
+
+  const opponents = pgcr.players.filter(
+    (player) => player.team !== null && player.team !== viewer.team,
+  );
+  return {
+    viewerRow,
+    encounterRows: opponents.map((opponent) => ({
+      viewer_user_id: viewerUserId,
+      viewer_membership_id: viewerMembershipId,
+      opponent_membership_id: opponent.membershipId,
+      opponent_membership_type: opponent.membershipType,
+      opponent_display_name: opponent.displayName ?? "Guardian",
+      instance_id: pgcr.instanceId,
+      mode_bucket: modeBucket,
+      viewer_won: viewer.isWin,
+      played_at: pgcr.period,
+    })),
+  };
+}
+
 function requireNoError(result: { error?: unknown } | null | undefined, operation: string) {
   if (result?.error) throw new Error(`${operation} failed: ${String(result.error)}`);
 }
@@ -130,51 +174,17 @@ export async function importCrucibleMatch(input: {
   if (!source) {
     return { imported: false, encounterCount: 0 };
   }
-  const { pgcr, modeBucket } = source;
-
-  const viewer = pgcr.players.find((player) => player.membershipId === input.viewerMembershipId);
-  if (!viewer) return { imported: false, encounterCount: 0 };
+  const viewerRows = buildCrucibleViewerRows(source, input.viewerUserId, input.viewerMembershipId);
+  if (!viewerRows) return { imported: false, encounterCount: 0 };
   await upsertCrucibleMatchSource(source, db);
-
-  const markViewerImported = async () => requireNoError(
-    await db.from("crucible_match_viewers").upsert({
-      viewer_user_id: input.viewerUserId,
-      viewer_membership_id: input.viewerMembershipId,
-      instance_id: pgcr.instanceId,
-      played_at: pgcr.period,
-    }, { onConflict: "viewer_user_id,instance_id" }),
-    "viewer match upsert",
-  );
-
-  // Free-for-all and malformed reports do not expose a trustworthy opponent
-  // boundary. Keep their source rows, but never invent head-to-head records.
-  if (viewer.team === null) {
-    await markViewerImported();
-    return { imported: true, encounterCount: 0 };
+  if (viewerRows.encounterRows.length > 0) {
+    requireNoError(await db.from("crucible_encounters").upsert(viewerRows.encounterRows, {
+      onConflict: "viewer_user_id,opponent_membership_id,instance_id",
+    }), "encounter upsert");
   }
-  const opponents = pgcr.players.filter(
-    (player) => player.team !== null && player.team !== viewer.team,
-  );
-  if (opponents.length === 0) {
-    await markViewerImported();
-    return { imported: true, encounterCount: 0 };
-  }
+  requireNoError(await db.from("crucible_match_viewers").upsert(viewerRows.viewerRow, {
+    onConflict: "viewer_user_id,instance_id",
+  }), "viewer match upsert");
 
-  const encounters = opponents.map((opponent) => ({
-    viewer_user_id: input.viewerUserId,
-    viewer_membership_id: input.viewerMembershipId,
-    opponent_membership_id: opponent.membershipId,
-    opponent_membership_type: opponent.membershipType,
-    opponent_display_name: opponent.displayName ?? "Guardian",
-    instance_id: pgcr.instanceId,
-    mode_bucket: modeBucket,
-    viewer_won: viewer.isWin,
-    played_at: pgcr.period,
-  }));
-  requireNoError(await db.from("crucible_encounters").upsert(encounters, {
-    onConflict: "viewer_user_id,opponent_membership_id,instance_id",
-  }), "encounter upsert");
-  await markViewerImported();
-
-  return { imported: true, encounterCount: encounters.length };
+  return { imported: true, encounterCount: viewerRows.encounterRows.length };
 }

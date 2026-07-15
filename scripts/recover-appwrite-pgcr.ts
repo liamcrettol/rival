@@ -4,7 +4,10 @@ import { createHash } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
 import { Query } from "node-appwrite";
-import { buildCrucibleMatchSource } from "../lib/crucible/importMatch";
+import {
+  buildCrucibleMatchSource,
+  buildCrucibleViewerRows,
+} from "../lib/crucible/importMatch";
 
 loadEnvConfig(process.cwd());
 
@@ -123,6 +126,23 @@ async function fetchAllIds(
   return ids;
 }
 
+async function fetchAllAccounts(): Promise<Array<{ userId: string; membershipId: string }>> {
+  const accounts: Array<{ userId: string; membershipId: string }> = [];
+  for (let from = 0;; from += 1_000) {
+    const { data, error } = await supabase
+      .from("bungie_accounts")
+      .select("user_id, membership_id")
+      .order("user_id")
+      .range(from, from + 999);
+    if (error) throw new Error(`bungie_accounts inventory failed: ${error.message}`);
+    for (const row of data ?? []) {
+      accounts.push({ userId: String(row.user_id), membershipId: String(row.membership_id) });
+    }
+    if ((data?.length ?? 0) < 1_000) break;
+  }
+  return accounts;
+}
+
 async function download(fileId: string): Promise<Buffer> {
   const url = `${endpoint}/storage/buckets/${encodeURIComponent(bucketId)}/files/${encodeURIComponent(fileId)}/download`;
   let lastError: Error | null = null;
@@ -168,6 +188,7 @@ async function main() {
   const allFiles = await enumerateArchive();
   const verified = await fetchAllIds("pgcr_cache", (query) => query.not("appwrite_migrated_at", "is", null));
   const existingMatches = await fetchAllIds("crucible_matches");
+  const accounts = await fetchAllAccounts();
   let pending = allFiles.filter((file) => !verified.has(file.$id));
   if (itemLimit !== null) pending = pending.slice(0, itemLimit);
 
@@ -175,6 +196,7 @@ async function main() {
     archiveFiles: allFiles.length,
     alreadyVerified: verified.size,
     existingMatches: existingMatches.size,
+    rivalAccounts: accounts.length,
     pending: pending.length,
     dryRun,
   }));
@@ -201,8 +223,14 @@ async function main() {
     const unsupportedInBatch = downloaded.filter(
       (item) => !item.source && !existingMatches.has(item.file.$id),
     ).length;
+    const viewerBundles = sources.flatMap((source) => accounts.flatMap((account) => {
+      const rows = buildCrucibleViewerRows(source, account.userId, account.membershipId);
+      return rows ? [rows] : [];
+    }));
     await upsertChunks("crucible_matches", sources.map((source) => source.matchRow), 100, "instance_id");
     await upsertChunks("crucible_match_players", sources.flatMap((source) => source.playerRows), 500, "instance_id,membership_id");
+    await upsertChunks("crucible_encounters", viewerBundles.flatMap((rows) => rows.encounterRows), 500, "viewer_user_id,opponent_membership_id,instance_id");
+    await upsertChunks("crucible_match_viewers", viewerBundles.map((rows) => rows.viewerRow), 500, "viewer_user_id,instance_id");
 
     const now = new Date().toISOString();
     await upsertChunks("pgcr_cache", downloaded.map(({ file, bytes, sha256 }) => ({
