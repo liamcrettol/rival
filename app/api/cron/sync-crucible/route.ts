@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertCronAuth } from "@/lib/auth/cron";
+import { checkDatabaseCapacity } from "@/lib/db/capacity";
 import { isBungieAuthErrorMessage } from "@/lib/auth/bungieErrors";
 import { adminSupabase } from "@/lib/supabase/admin";
 import {
@@ -56,6 +57,8 @@ async function moveRequeuedSyncToBack(userId: string): Promise<void> {
 export async function GET(req: NextRequest) {
   const denied = assertCronAuth(req);
   if (denied) return denied;
+
+  await checkDatabaseCapacity("rival/sync-crucible");
 
   const startedAt = Date.now();
   const workerId = `crucible-${Math.random().toString(36).slice(2, 8)}`;

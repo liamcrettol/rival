@@ -44,6 +44,9 @@ NextAuth v5 beta (custom Bungie provider) / Vercel.
 
 ## Database
 
+- `database_size_bytes()` is checked by the sync-crucible cron. At 400 MB (80%
+  of the 500 MB free-tier allowance), it emits a `[database-capacity] WARNING`
+  error for the existing logging pipeline.
 - Plain SQL in `supabase/migrations/`, numbered sequentially, idempotent.
 - Run against the live DB with `node scripts/db-query.mjs <file>` (needs your
   own `DATABASE_URL` in `.env.local`, session pooler string from the Supabase
