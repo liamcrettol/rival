@@ -303,6 +303,17 @@ export async function claimCrucibleSync(
   return row?.user_id ? row as CrucibleSyncState : null;
 }
 
+export async function queueDueCrucibleSyncs(
+  staleMinutes = 15,
+  db: Db = adminSupabase,
+): Promise<number> {
+  const { data, error } = await db.rpc("queue_due_crucible_syncs", {
+    p_stale_minutes: staleMinutes,
+  });
+  if (error) throw new Error(`queue_due_crucible_syncs failed: ${error.message}`);
+  return typeof data === "number" ? data : Number(data ?? 0);
+}
+
 // Record a per-user backfill failure without failing the whole cron run.
 // Transient failures retry with backoff up to a few times, then park the user
 // as failed. Auth failures (dead or cross-app refresh token) are deterministic:
@@ -377,4 +388,3 @@ export async function listParkedCrucibleSyncs(db: Db = adminSupabase): Promise<P
 }
 
 export type { CrucibleActivityHistoryEntry };
-

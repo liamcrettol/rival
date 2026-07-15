@@ -20,6 +20,95 @@ function rawIsPrivate(raw: unknown): boolean {
   return details?.isPrivate === true;
 }
 
+export interface CrucibleMatchSource {
+  pgcr: Extract<ReturnType<typeof parsePgcr>, { kind: "pvp" }>;
+  modeBucket: ReturnType<typeof classifyCrucibleMode>;
+  matchRow: Record<string, unknown>;
+  playerRows: Array<Record<string, unknown>>;
+}
+
+export function buildCrucibleMatchSource(input: {
+  rawPgcr: unknown;
+  activityName?: string | null;
+  activityImage?: string | null;
+  activityDefModes?: number[];
+  directorActivityName?: string | null;
+  directorActivityDefModes?: number[];
+  now?: string;
+}): CrucibleMatchSource | null {
+  const parsed = parsePgcr(input.rawPgcr);
+  if (!parsed.isSupported || parsed.kind !== "pvp" || !parsed.instanceId || !parsed.period) {
+    return null;
+  }
+
+  const pgcr = parsed as Extract<ReturnType<typeof parsePgcr>, { kind: "pvp" }>;
+  const activityModes = [...new Set([
+    ...pgcr.activityModes,
+    ...(input.activityDefModes ?? []),
+    ...(input.directorActivityDefModes ?? []),
+  ])];
+  const modeBucket = classifyCrucibleMode({
+    activityMode: pgcr.activityMode,
+    activityModes,
+    activityHash: pgcr.activityHash,
+    activityName: input.activityName,
+    directorActivityName: input.directorActivityName,
+  });
+  const now = input.now ?? new Date().toISOString();
+
+  return {
+    pgcr,
+    modeBucket,
+    matchRow: {
+      instance_id: pgcr.instanceId,
+      activity_hash: pgcr.activityHash,
+      director_activity_hash: pgcr.directorActivityHash,
+      activity_mode: pgcr.activityMode,
+      activity_modes: activityModes,
+      mode_bucket: modeBucket,
+      activity_name: input.activityName ?? null,
+      activity_image: input.activityImage ?? null,
+      period: pgcr.period,
+      duration_seconds: pgcr.durationSeconds,
+      is_private: rawIsPrivate(input.rawPgcr),
+      team_data: pgcr.teams,
+      updated_at: now,
+    },
+    playerRows: pgcr.players.map((player) => ({
+      instance_id: pgcr.instanceId,
+      membership_id: player.membershipId,
+      membership_type: player.membershipType,
+      display_name: player.displayName ?? "Guardian",
+      emblem_path: player.emblemPath ?? null,
+      team_id: player.team,
+      is_win: player.isWin,
+      completed: player.completed,
+      kills: player.kills,
+      deaths: player.deaths,
+      assists: player.assists,
+      score: player.score,
+      updated_at: now,
+    })),
+  };
+}
+
+export async function upsertCrucibleMatchSource(source: CrucibleMatchSource, db: Db = adminSupabase): Promise<void> {
+  const matchRow = { ...source.matchRow };
+  let matchResult = await db.from("crucible_matches").upsert(matchRow, { onConflict: "instance_id" });
+  if (matchResult?.error) {
+    const message = String(matchResult.error.message ?? matchResult.error);
+    if (/director_activity_hash/.test(message)) delete matchRow.director_activity_hash;
+    if (/activity_image/.test(message)) delete matchRow.activity_image;
+    if (/director_activity_hash|activity_image/.test(message)) {
+      matchResult = await db.from("crucible_matches").upsert(matchRow, { onConflict: "instance_id" });
+    }
+  }
+  requireNoError(matchResult, "match upsert");
+  requireNoError(await db.from("crucible_match_players").upsert(source.playerRows, {
+    onConflict: "instance_id,membership_id",
+  }), "player upsert");
+}
+
 function requireNoError(result: { error?: unknown } | null | undefined, operation: string) {
   if (result?.error) throw new Error(`${operation} failed: ${String(result.error)}`);
 }
@@ -37,75 +126,15 @@ export async function importCrucibleMatch(input: {
   db?: Db;
 }): Promise<{ imported: boolean; encounterCount: number }> {
   const db = input.db ?? adminSupabase;
-  const pgcr = parsePgcr(input.rawPgcr);
-  if (!pgcr.isSupported || pgcr.kind !== "pvp" || !pgcr.instanceId || !pgcr.period) {
+  const source = buildCrucibleMatchSource(input);
+  if (!source) {
     return { imported: false, encounterCount: 0 };
   }
+  const { pgcr, modeBucket } = source;
 
   const viewer = pgcr.players.find((player) => player.membershipId === input.viewerMembershipId);
   if (!viewer) return { imported: false, encounterCount: 0 };
-
-  const activityModes = [...new Set([
-    ...pgcr.activityModes,
-    ...(input.activityDefModes ?? []),
-    ...(input.directorActivityDefModes ?? []),
-  ])];
-  const modeBucket = classifyCrucibleMode({
-    activityMode: pgcr.activityMode,
-    activityModes,
-    activityHash: pgcr.activityHash,
-    activityName: input.activityName,
-    directorActivityName: input.directorActivityName,
-  });
-  const now = new Date().toISOString();
-  const isPrivate = rawIsPrivate(input.rawPgcr);
-
-  const matchRow: Record<string, unknown> = {
-    instance_id: pgcr.instanceId,
-    activity_hash: pgcr.activityHash,
-    director_activity_hash: pgcr.directorActivityHash,
-    activity_mode: pgcr.activityMode,
-    activity_modes: activityModes,
-    mode_bucket: modeBucket,
-    activity_name: input.activityName ?? null,
-    activity_image: input.activityImage ?? null,
-    period: pgcr.period,
-    duration_seconds: pgcr.durationSeconds,
-    is_private: isPrivate,
-    team_data: pgcr.teams,
-    updated_at: now,
-  };
-  // Additive columns may briefly lag a deploy. Drop only the missing column and
-  // retry so a rolling deployment never blocks match imports.
-  let matchResult = await db.from("crucible_matches").upsert(matchRow, { onConflict: "instance_id" });
-  if (matchResult?.error) {
-    const message = String(matchResult.error.message ?? matchResult.error);
-    if (/director_activity_hash/.test(message)) delete matchRow.director_activity_hash;
-    if (/activity_image/.test(message)) delete matchRow.activity_image;
-    if (/director_activity_hash|activity_image/.test(message)) {
-      matchResult = await db.from("crucible_matches").upsert(matchRow, { onConflict: "instance_id" });
-    }
-  }
-  requireNoError(matchResult, "match upsert");
-
-  const playerRows = pgcr.players.map((player) => ({
-    instance_id: pgcr.instanceId,
-    membership_id: player.membershipId,
-    membership_type: player.membershipType,
-    display_name: player.displayName ?? "Guardian",
-    emblem_path: player.emblemPath ?? null,
-    team_id: player.team,
-    is_win: player.isWin,
-    completed: player.completed,
-    kills: player.kills,
-    deaths: player.deaths,
-    assists: player.assists,
-    score: player.score,
-    updated_at: now,
-  }));
-  requireNoError(await db.from("crucible_match_players").upsert(playerRows, {
-    onConflict: "instance_id,membership_id",
-  }), "player upsert");
+  await upsertCrucibleMatchSource(source, db);
 
   const markViewerImported = async () => requireNoError(
     await db.from("crucible_match_viewers").upsert({

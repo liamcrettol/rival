@@ -11,6 +11,7 @@ import {
   claimCrucibleSync,
   failCrucibleSync,
   listParkedCrucibleSyncs,
+  queueDueCrucibleSyncs,
   syncNextCrucibleHistoryPage,
   type ParkedCrucibleSync,
 } from "@/lib/crucible/sync";
@@ -81,6 +82,7 @@ export async function GET(req: NextRequest) {
   const retried: SyncFailure[] = [];
 
   try {
+    const automaticallyQueued = await queueDueCrucibleSyncs();
     const queuedBefore = await countDueQueuedSyncs(new Date().toISOString());
 
     // Leave enough headroom for the final page, queue counts, parked-user
@@ -173,6 +175,7 @@ export async function GET(req: NextRequest) {
       workerId,
       queuedBefore,
       queuedRemaining,
+      automaticallyQueued,
       ...result,
       failures,
       retried,
