@@ -21,8 +21,8 @@ const supabase = createClient(
   { auth: { persistSession: false, autoRefreshToken: false } },
 );
 
-const BATCH_SIZE = 200;
-const DOWNLOAD_CONCURRENCY = 16;
+const BATCH_SIZE = 400;
+const DOWNLOAD_CONCURRENCY = 32;
 const limitArg = process.argv.find((arg) => arg.startsWith("--limit="));
 const itemLimit = limitArg ? Math.max(0, Number(limitArg.split("=")[1])) : null;
 const dryRun = process.argv.includes("--dry-run");
