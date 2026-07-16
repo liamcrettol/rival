@@ -1,5 +1,6 @@
 import { adminSupabase } from "@/lib/supabase/admin";
 import { getHeadToHeadSummaries } from "./headToHead";
+import { isPlaceholderPlayerName, loadCanonicalPlayerIdentities } from "./playerIdentity";
 import type { OpponentSearchResult } from "./types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -163,24 +164,27 @@ export async function searchOpponents(input: {
   }
 
   const results = [...merged.values()].slice(0, 16);
-  const { data: emblemRows, error: emblemError } = await db.rpc("get_latest_player_emblems", {
-    p_membership_ids: results.map((result) => result.membershipId),
-  });
-  if (emblemError) throw new Error(`Opponent emblem lookup failed: ${emblemError.message}`);
-  const emblems = new Map<string, string>(
-    (emblemRows ?? []).map((row: { membership_id: string; emblem_path: string }) => [row.membership_id, row.emblem_path] as const),
-  );
+  const identities = await loadCanonicalPlayerIdentities(db, results.map((result) => result.membershipId));
   const summaries = await getHeadToHeadSummaries({
     viewerUserId: input.viewerUserId,
     opponentMembershipIds: results.map((result) => result.membershipId),
     db,
   });
   return results
-    .map((result) => ({
-      ...result,
-      emblemPath: emblems.get(result.membershipId) ?? null,
-      hasHistory: Boolean(summaries[result.membershipId]),
-      summary: summaries[result.membershipId] ?? null,
-    }))
+    .map((result) => {
+      const identity = identities.get(result.membershipId);
+      return {
+        ...result,
+        membershipType: !result.membershipType && identity?.membership_type
+          ? identity.membership_type
+          : result.membershipType,
+        displayName: isPlaceholderPlayerName(result.displayName) && identity?.display_name
+          ? identity.display_name
+          : result.displayName,
+        emblemPath: identity?.emblem_path ?? null,
+        hasHistory: Boolean(summaries[result.membershipId]),
+        summary: summaries[result.membershipId] ?? null,
+      };
+    })
     .sort((a, b) => Number(b.hasHistory) - Number(a.hasHistory) || a.displayName.localeCompare(b.displayName));
 }

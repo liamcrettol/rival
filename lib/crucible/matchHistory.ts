@@ -8,6 +8,7 @@ function buildTrialsReportUrl(membershipType: number | null, membershipId: strin
 }
 import { classifyCrucibleMode, crucibleModeName } from "./modes";
 import { getHeadToHeadSummaries } from "./headToHead";
+import { isPlaceholderPlayerName, loadCanonicalPlayerIdentities } from "./playerIdentity";
 import type { CrucibleModeBucket, CrucibleSyncState } from "./types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -169,20 +170,26 @@ export async function getCrucibleMatchHistory(
 
   const matchRows = await repairStaleModeBuckets((rawMatchRows ?? []) as MatchRow[], db, resolveDef);
   let typedPlayers = (playerRows ?? []) as PlayerRow[];
-  const missingEmblemIds = [...new Set(typedPlayers
-    .filter((row) => !row.emblem_path)
+  const identityIds = [...new Set(typedPlayers
+    .filter((row) => !row.emblem_path || !row.membership_type || isPlaceholderPlayerName(row.display_name))
     .map((row) => row.membership_id))];
-  if (missingEmblemIds.length > 0) {
+  if (identityIds.length > 0) {
     try {
-      const { data: latestEmblems } = await db.rpc("get_latest_player_emblems", {
-        p_membership_ids: missingEmblemIds,
+      const identities = await loadCanonicalPlayerIdentities(db, identityIds);
+      typedPlayers = typedPlayers.map((row) => {
+        const identity = identities.get(row.membership_id);
+        if (!identity) return row;
+        return {
+          ...row,
+          membership_type: !row.membership_type && identity.membership_type
+            ? identity.membership_type
+            : row.membership_type,
+          display_name: isPlaceholderPlayerName(row.display_name) && identity.display_name
+            ? identity.display_name
+            : row.display_name,
+          emblem_path: row.emblem_path || identity.emblem_path,
+        };
       });
-      const fallbackEmblems = new Map<string, string>(
-        (latestEmblems ?? []).map((row: { membership_id: string; emblem_path: string }) => [row.membership_id, row.emblem_path] as const),
-      );
-      typedPlayers = typedPlayers.map((row) => row.emblem_path
-        ? row
-        : { ...row, emblem_path: fallbackEmblems.get(row.membership_id) ?? null });
     } catch {
       // Old reports remain usable with the existing initial-letter fallback.
     }

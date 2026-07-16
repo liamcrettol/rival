@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth/helpers";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import type { RivalryLeader } from "@/lib/crucible/types";
 import { syncRivalryFriendExclusions } from "@/lib/crucible/rivalryFriends";
+import { isPlaceholderPlayerName, loadCanonicalPlayerIdentities } from "@/lib/crucible/playerIdentity";
 
 interface LeaderRow {
   leader_type: "wins" | "losses";
@@ -41,25 +42,26 @@ export async function GET() {
     if (error) throw new Error(`Rivalry leaderboard lookup failed: ${error.message}`);
     const rows = (data ?? []) as LeaderRow[];
     const membershipIds = [...new Set(rows.map((row) => row.opponent_membership_id))];
-    const { data: emblemRows, error: emblemError } = membershipIds.length > 0
-      ? await supabase.rpc("get_latest_player_emblems", { p_membership_ids: membershipIds })
-      : { data: [], error: null };
-    if (emblemError) throw new Error(`Rivalry emblem lookup failed: ${emblemError.message}`);
-    const emblems = new Map<string, string>(
-      (emblemRows ?? []).map((row: { membership_id: string; emblem_path: string }) => [row.membership_id, row.emblem_path] as const),
-    );
-    const convert = (row: LeaderRow): RivalryLeader => ({
+    const identities = await loadCanonicalPlayerIdentities(supabase, membershipIds);
+    const convert = (row: LeaderRow): RivalryLeader => {
+      const identity = identities.get(row.opponent_membership_id);
+      return ({
       rank: Number(row.rank),
       membershipId: row.opponent_membership_id,
-      membershipType: row.opponent_membership_type,
-      displayName: row.opponent_display_name,
-      emblemPath: emblems.get(row.opponent_membership_id) ?? null,
+      membershipType: !row.opponent_membership_type && identity?.membership_type
+        ? identity.membership_type
+        : row.opponent_membership_type,
+      displayName: isPlaceholderPlayerName(row.opponent_display_name) && identity?.display_name
+        ? identity.display_name
+        : row.opponent_display_name,
+      emblemPath: identity?.emblem_path ?? null,
       encounters: Number(row.encounters),
       wins: Number(row.wins),
       losses: Number(row.losses),
       unknown: Number(row.unknown),
       lastPlayedAt: row.last_played_at,
-    });
+      });
+    };
     return NextResponse.json({
       mostDefeated: rows.filter((row) => row.leader_type === "wins").map(convert),
       toughestRivals: rows.filter((row) => row.leader_type === "losses").map(convert),
