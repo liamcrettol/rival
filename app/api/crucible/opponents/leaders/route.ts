@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth/helpers";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import type { RivalryLeader } from "@/lib/crucible/types";
+import { syncRivalryFriendExclusions } from "@/lib/crucible/rivalryFriends";
 
 interface LeaderRow {
   leader_type: "wins" | "losses";
@@ -22,6 +23,17 @@ export async function GET() {
     // This aggregate can exceed the app-wide 1.2s Supabase budget for users
     // with large histories, so give this authenticated dashboard query room.
     const supabase = createAdminSupabaseClient(5_000);
+    await syncRivalryFriendExclusions({
+      userId: session.userId,
+      viewerMembershipId: session.bungieMembershipId,
+      db: supabase,
+    }).catch((error) => {
+      // Last-known exclusions remain in Postgres when Bungie is unavailable.
+      console.error(
+        "[crucible/rivalry-leaders] friend sync failed:",
+        error instanceof Error ? error.message : error
+      );
+    });
     const { data, error } = await supabase.rpc("get_h2h_rivalry_leaders", {
       p_viewer_user_id: session.userId,
       p_limit: 5,
