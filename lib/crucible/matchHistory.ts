@@ -168,13 +168,31 @@ export async function getCrucibleMatchHistory(
   if (playerError) throw new Error(`Crucible roster lookup failed: ${playerError.message}`);
 
   const matchRows = await repairStaleModeBuckets((rawMatchRows ?? []) as MatchRow[], db, resolveDef);
+  let typedPlayers = (playerRows ?? []) as PlayerRow[];
+  const missingEmblemIds = [...new Set(typedPlayers
+    .filter((row) => !row.emblem_path)
+    .map((row) => row.membership_id))];
+  if (missingEmblemIds.length > 0) {
+    try {
+      const { data: latestEmblems } = await db.rpc("get_latest_player_emblems", {
+        p_membership_ids: missingEmblemIds,
+      });
+      const fallbackEmblems = new Map<string, string>(
+        (latestEmblems ?? []).map((row: { membership_id: string; emblem_path: string }) => [row.membership_id, row.emblem_path] as const),
+      );
+      typedPlayers = typedPlayers.map((row) => row.emblem_path
+        ? row
+        : { ...row, emblem_path: fallbackEmblems.get(row.membership_id) ?? null });
+    } catch {
+      // Old reports remain usable with the existing initial-letter fallback.
+    }
+  }
   const playersByInstance = new Map<string, PlayerRow[]>();
-  for (const row of (playerRows ?? []) as PlayerRow[]) {
+  for (const row of typedPlayers) {
     const list = playersByInstance.get(row.instance_id) ?? [];
     list.push(row);
     playersByInstance.set(row.instance_id, list);
   }
-  const typedPlayers = (playerRows ?? []) as PlayerRow[];
   const opponentIds: string[] = [...new Set(typedPlayers
     .filter((row: PlayerRow) => row.membership_id !== account.membership_id)
     .map((row: PlayerRow) => row.membership_id))];
