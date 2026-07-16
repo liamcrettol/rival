@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { adminSupabase } from "@/lib/supabase/admin";
+import { adminSupabase, createAdminSupabaseClient } from "@/lib/supabase/admin";
 
 type SourceAccount = {
   user_id: string;
@@ -93,15 +93,26 @@ export async function syncSiteCrucibleRoster(): Promise<number> {
   // especially important for accounts whose Bungie activity feed is private:
   // their matches are still attributable whenever the PGCR reached the site
   // through another participant or the durable archive.
-  const { error: materializeError } = await adminSupabase.rpc("materialize_sitewide_crucible_viewers", {
-    // A newly discovered user gets their entire known history once. Normal
-    // minute-level runs inspect only PGCRs touched in the last hour. A worker
-    // outage cannot create a gap because no new PGCRs are imported while the
-    // worker is down; resumed imports receive a fresh updated_at timestamp.
-    p_user_ids: missing.length > 0 ? missing.map((account) => account.user_id) : null,
-  });
-  if (materializeError) {
-    throw new Error(`Sitewide archived H2H materialization failed: ${materializeError.message}`);
+  // The SQL scan can run longer than the app-wide 1.2s request budget. Give it
+  // room, but keep it best-effort: archived H2H enrichment must never prevent
+  // the same cron invocation from claiming and advancing Bungie history pages.
+  try {
+    const materializeDb = createAdminSupabaseClient(5_000);
+    const { error: materializeError } = await materializeDb.rpc("materialize_sitewide_crucible_viewers", {
+      // A newly discovered user gets their entire known history once. Normal
+      // minute-level runs inspect only PGCRs touched in the last hour. A worker
+      // outage cannot create a gap because no new PGCRs are imported while the
+      // worker is down; resumed imports receive a fresh updated_at timestamp.
+      p_user_ids: missing.length > 0 ? missing.map((account) => account.user_id) : null,
+    });
+    if (materializeError) {
+      console.error("[crucible/site-roster] archived H2H materialization failed:", materializeError.message);
+    }
+  } catch (error) {
+    console.error(
+      "[crucible/site-roster] archived H2H materialization timed out:",
+      error instanceof Error ? error.message : error,
+    );
   }
 
   return accounts.length;
