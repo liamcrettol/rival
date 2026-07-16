@@ -274,8 +274,8 @@ export default function OpponentSearch({ children }: { children?: React.ReactNod
   }
 
   return (
-    <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
-      <div className="w-full min-w-0 max-w-5xl flex-1 space-y-6">
+    <div className="grid grid-cols-1 gap-6 [grid-template-areas:'search'_'leaderboard'_'history'] xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start xl:[grid-template-areas:'search_leaderboard'_'history_leaderboard']">
+      <div className="min-w-0 max-w-5xl [grid-area:search]">
         <section className="panel" aria-labelledby="opponent-search-heading">
       <div className="border-b border-bungie-border px-6 py-8 sm:px-8">
        <div className="max-w-3xl">
@@ -469,11 +469,13 @@ export default function OpponentSearch({ children }: { children?: React.ReactNod
         </div>
       )}
         </section>
+      </div>
 
+      <div className="min-w-0 max-w-5xl [grid-area:history]">
         {children}
       </div>
 
-      <aside className="w-full space-y-6 xl:w-[320px] xl:shrink-0">
+      <aside className="min-w-0 space-y-6 [grid-area:leaderboard]">
         {leadersLoading ? (
           <div className="flex items-center justify-center gap-2 border border-bungie-border bg-bungie-dark/35 py-8 text-xs text-gray-500">
             <LoaderCircle className="animate-spin" size={14} /> Ranking your rivalries…
