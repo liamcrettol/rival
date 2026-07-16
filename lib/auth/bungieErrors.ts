@@ -6,6 +6,6 @@ export function isBungieAuthErrorMessage(msg: string): boolean {
     msg === "No Bungie account found for user" ||
     msg === "Bungie token expired. Please sign in again" ||
     msg === BUNGIE_REAUTH_MESSAGE ||
-    msg.startsWith("Bungie token refresh failed (")
+    msg.includes("Bungie token refresh failed (")
   );
 }

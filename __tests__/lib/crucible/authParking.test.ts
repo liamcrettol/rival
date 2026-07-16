@@ -63,6 +63,28 @@ describe("failCrucibleSync auth parking", () => {
     expect(outcome.terminal).toBe(true);
   });
 
+  it("parks a source-bridge refresh failure immediately", async () => {
+    const db = makeSyncDb(1);
+    const outcome = await failCrucibleSync(
+      "user-1",
+      new Error(`Main-site Bungie token bridge failed (502): ${AUTH_ERROR}`),
+      db,
+    );
+    expect(db.updates[0].status).toBe("failed");
+    expect(outcome.terminal).toBe(true);
+  });
+
+  it("parks a privacy-restricted history feed immediately", async () => {
+    const db = makeSyncDb(1);
+    const outcome = await failCrucibleSync(
+      "user-1",
+      new Error("Bungie API error: DestinyPrivacyRestriction"),
+      db,
+    );
+    expect(db.updates[0].status).toBe("failed");
+    expect(outcome.terminal).toBe(true);
+  });
+
   it("still retries transient failures with backoff", async () => {
     const db = makeSyncDb(1);
     const outcome = await failCrucibleSync("user-1", new Error("Bungie request failed (503)"), db);

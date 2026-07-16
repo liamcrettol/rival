@@ -329,7 +329,9 @@ export async function failCrucibleSync(
   const message = errorMessage(error);
   const { data: state, error: stateError } = await db.from("crucible_sync_state").select("attempts").eq("user_id", userId).single();
   if (stateError || !state) throw new Error(`Sync failure state read failed: ${stateError?.message ?? "missing"}`);
-  const terminal = isBungieAuthErrorMessage(message) || (state?.attempts ?? 0) >= 5;
+  const terminal = isBungieAuthErrorMessage(message)
+    || message.includes("DestinyPrivacyRestriction")
+    || (state?.attempts ?? 0) >= 5;
   const { error: updateError } = await db.from("crucible_sync_state").update({
     status: terminal ? "failed" : "queued",
     locked_by: null,
