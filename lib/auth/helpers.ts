@@ -23,6 +23,29 @@ function normalizeBungieTokenError(err: unknown): Error {
   return err instanceof Error ? err : new Error(msg);
 }
 
+async function getSiteBungieToken(userId: string, membershipId?: string): Promise<string> {
+  const baseUrl = process.env.REROLLED_SYNC_BASE_URL;
+  const secret = process.env.REROLLED_SYNC_SECRET;
+  if (!baseUrl || !secret) {
+    throw new Error("Main-site Bungie token bridge is not configured");
+  }
+
+  const response = await fetch(`${baseUrl.replace(/\/$/, "")}/api/internal/rival/bungie-token`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${secret}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ userId, membershipId }),
+    cache: "no-store",
+  });
+  const body = await response.json().catch(() => null) as { accessToken?: string; error?: string } | null;
+  if (!response.ok || !body?.accessToken) {
+    throw new Error(`Main-site Bungie token bridge failed (${response.status}): ${body?.error ?? "unknown error"}`);
+  }
+  return body.accessToken;
+}
+
 const ACCOUNT_TOKEN_COLUMNS =
   "user_id, access_token_enc, refresh_token_enc, expires_at, membership_id, oauth_client_id, public_history_sync";
 
@@ -108,9 +131,11 @@ export async function getBungieToken(userId: string, membershipId?: string): Pro
     throw new Error("No Bungie account found for user");
   }
 
-  // Main-site roster mirrors intentionally carry no OAuth ciphertext. Public
-  // profile/activity-history reads work with the application API key alone.
-  if (data.public_history_sync) return "";
+  // Main-site roster mirrors intentionally carry no OAuth ciphertext. The
+  // source app remains responsible for refresh-token rotation and lends Rival
+  // only the resulting short-lived access token. This also covers users whose
+  // Destiny activity history is private.
+  if (data.public_history_sync) return getSiteBungieToken(userId, data.membership_id);
 
   // Refresh if expired (with 90s buffer)
   if (data.expires_at) {
