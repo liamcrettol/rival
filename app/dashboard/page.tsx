@@ -5,6 +5,7 @@ import CrucibleHistorySync from "@/components/CrucibleHistorySync";
 import SignOutButton from "@/components/SignOutButton";
 import { getCrucibleMatchHistory } from "@/lib/crucible/matchHistory";
 import { queueCrucibleSync } from "@/lib/crucible/queueSync";
+import OpponentSearch from "@/components/crucible/OpponentSearch";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,7 @@ export default async function Dashboard() {
 
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
         <CrucibleHistorySync />
+        <OpponentSearch />
         <MatchHistoryPanel matches={history.matches} syncStatus={history.syncStatus} />
       </main>
     </div>

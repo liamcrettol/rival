@@ -38,6 +38,16 @@ export interface HeadToHeadSummary extends HeadToHeadModeRecord {
   recentMeetings: HeadToHeadMeeting[];
 }
 
+export interface OpponentSearchResult {
+  membershipId: string;
+  membershipType: number | null;
+  displayName: string;
+  platformDisplayName: string | null;
+  source: "history" | "bungie";
+  hasHistory: boolean;
+  summary: HeadToHeadSummary | null;
+}
+
 export interface CrucibleSyncState {
   user_id: string;
   status: "queued" | "syncing" | "complete" | "failed";
