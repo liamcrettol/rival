@@ -66,7 +66,7 @@ async function bungieRequest<T>(
       ...init,
       headers: {
         "X-API-Key": process.env.BUNGIE_API_KEY!,
-        Authorization: `Bearer ${accessToken}`,
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         ...(init.headers ?? {}),
       },
       next: { revalidate: 0 }, // always fresh

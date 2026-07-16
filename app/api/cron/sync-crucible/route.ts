@@ -15,6 +15,7 @@ import {
   syncNextCrucibleHistoryPage,
   type ParkedCrucibleSync,
 } from "@/lib/crucible/sync";
+import { syncSiteCrucibleRoster } from "@/lib/crucible/siteRoster";
 
 // Background Crucible history backfill, invoked by Supabase pg_cron.
 // Each run claims due users and walks their history a page at a time until the
@@ -82,6 +83,7 @@ export async function GET(req: NextRequest) {
   const retried: SyncFailure[] = [];
 
   try {
+    const siteAccountsDiscovered = await syncSiteCrucibleRoster();
     const automaticallyQueued = await queueDueCrucibleSyncs();
     const queuedBefore = await countDueQueuedSyncs(new Date().toISOString());
 
@@ -176,6 +178,7 @@ export async function GET(req: NextRequest) {
       queuedBefore,
       queuedRemaining,
       automaticallyQueued,
+      siteAccountsDiscovered,
       ...result,
       failures,
       retried,

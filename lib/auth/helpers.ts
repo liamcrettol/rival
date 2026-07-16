@@ -24,7 +24,7 @@ function normalizeBungieTokenError(err: unknown): Error {
 }
 
 const ACCOUNT_TOKEN_COLUMNS =
-  "user_id, access_token_enc, refresh_token_enc, expires_at, membership_id, oauth_client_id";
+  "user_id, access_token_enc, refresh_token_enc, expires_at, membership_id, oauth_client_id, public_history_sync";
 
 async function findBungieAccount(userId: string, membershipId?: string) {
   const fallbackIds = [...new Set([membershipId, userId].filter(Boolean))] as string[];
@@ -107,6 +107,10 @@ export async function getBungieToken(userId: string, membershipId?: string): Pro
     if (sessionToken) return sessionToken;
     throw new Error("No Bungie account found for user");
   }
+
+  // Main-site roster mirrors intentionally carry no OAuth ciphertext. Public
+  // profile/activity-history reads work with the application API key alone.
+  if (data.public_history_sync) return "";
 
   // Refresh if expired (with 90s buffer)
   if (data.expires_at) {

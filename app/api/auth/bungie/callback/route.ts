@@ -261,6 +261,7 @@ export async function GET(req: NextRequest) {
             // different apps sharing this table, and refresh tokens are only
             // redeemable by their issuer (see lib/auth/helpers.ts).
             oauth_client_id: process.env.BUNGIE_CLIENT_ID ?? null,
+            public_history_sync: false,
             updated_at: new Date().toISOString(),
           },
           { onConflict: "user_id" }
