@@ -29,7 +29,7 @@ export default async function Home() {
       <div className="flex items-center gap-3 pt-8 text-xs text-gray-600">
         <span>Made by Invict Software Solutions</span>
         <span aria-hidden="true">·</span>
-        <a href="https://d2roulette.app" className="inline-flex min-h-[44px] items-center hover:text-gray-400">
+        <a href="https://rerolled.io" className="inline-flex min-h-[44px] items-center hover:text-gray-400">
           Play Rerolled
         </a>
         <span aria-hidden="true">·</span>

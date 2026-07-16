@@ -1,7 +1,7 @@
 # Rival
 
 Destiny 2 Crucible match history and head-to-head records, at
-**https://rival.d2roulette.app**. Sign in with Bungie and see your record
+**https://rival.rerolled.io**. Sign in with Bungie and see your record
 against every player you have faced: Trials, Competitive, Control,
 Iron Banner, all of it.
 
@@ -36,10 +36,10 @@ NextAuth v5 beta (custom Bungie provider) / Vercel.
    `node scripts/db-query.mjs <file>` with `DATABASE_URL` in `.env.local`).
    Skip 010 until the domain is live and Vault secrets exist.
 2. **Bungie app** (bungie.net/en/Application): new **Confidential** OAuth
-   client, redirect `https://rival.d2roulette.app/api/auth/bungie/callback`,
+   client, redirect `https://rival.rerolled.io/api/auth/bungie/callback`,
    scopes: read Destiny data. Note the client id, client secret, and API key.
 3. **Vercel**: import this repo as a new project. Add the domain
-   `rival.d2roulette.app` (d2roulette.app is on Vercel nameservers, so the
+   `rival.rerolled.io` (rerolled.io is on Vercel nameservers, so the
    subdomain just works). Set the env vars from `.env.example`.
 4. **pg_cron**: add Vault secrets `cron_app_url` + `cron_secret` in the new
    Supabase project, then run migration `010_pg_cron_pings.sql`.

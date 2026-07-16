@@ -6,7 +6,7 @@ const DESCRIPTION =
   "Destiny 2 Crucible match history and head-to-head records. See how many times you have beaten the player across the map.";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXTAUTH_URL ?? "https://rival.d2roulette.app"),
+  metadataBase: new URL(process.env.NEXTAUTH_URL ?? "https://rival.rerolled.io"),
   title: {
     default: "Rival",
     template: "%s | Rival",

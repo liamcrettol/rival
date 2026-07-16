@@ -4,7 +4,7 @@ Operating guide for Claude Code. Private repo; team-visible is fine. Never
 commit secret values (they live in Vercel / Supabase Vault).
 
 The app: Destiny 2 Crucible match history and head-to-head records at
-https://rival.d2roulette.app. Sister site of Rerolled (d2roulette.app); the
+https://rival.rerolled.io. Sister site of Rerolled (rerolled.io); the
 H2H pipeline was ported from that repo (see README for the reference docs).
 Stack: Next.js 15 (App Router) / React 19 / TypeScript / Tailwind / Supabase /
 NextAuth v5 beta (custom Bungie provider) / Vercel.

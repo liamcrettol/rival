@@ -20,7 +20,7 @@ const DESCRIPTION =
   "Destiny 2 Crucible match history and head-to-head records. See how many times you have beaten the player across the map.";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXTAUTH_URL ?? "https://rival.d2roulette.app"),
+  metadataBase: new URL(process.env.NEXTAUTH_URL ?? "https://rival.rerolled.io"),
   title: {
     default: "Rival",
     template: "%s | Rival",
@@ -70,7 +70,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   <div className="mx-auto flex h-[4.5rem] max-w-5xl items-center gap-6 px-4 sm:px-6">
     <span className="text-xl font-bold uppercase tracking-[0.12em]">Rival</span>
     <a
-      href="https://d2roulette.app"
+      href="https://rerolled.io"
       className="text-xs font-bold uppercase tracking-widest text-gray-400 transition-colors hover:text-white"
     >
       Play Rerolled
@@ -95,7 +95,7 @@ header — see routes.md)
 <div className="flex items-center gap-3 pt-8 text-xs text-gray-600">
   <span>Made by Invict Software Solutions</span>
   <span aria-hidden="true">·</span>
-  <a href="https://d2roulette.app" className="inline-flex min-h-[44px] items-center hover:text-gray-400">
+  <a href="https://rerolled.io" className="inline-flex min-h-[44px] items-center hover:text-gray-400">
     Play Rerolled
   </a>
   <span aria-hidden="true">·</span>

@@ -1,9 +1,9 @@
 # Rival — Design System
 
 ## Product context
-Rival (rival.d2roulette.app) is a Destiny 2 Crucible stats site: match
+Rival (rival.rerolled.io) is a Destiny 2 Crucible stats site: match
 history and head-to-head (H2H) records against every opponent a player has
-faced. Sister site of Rerolled (d2roulette.app, a weapon-loadout-roulette
+faced. Sister site of Rerolled (rerolled.io, a weapon-loadout-roulette
 game) — same studio, same visual family, shares the H2H data pipeline, but
 Rival's own core idea is rivalry/stats, not loadout rolling. Design work
 should give Rival a visual identity that reads as the same product family as

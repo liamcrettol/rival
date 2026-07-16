@@ -1,6 +1,6 @@
 # Theme / Design Tokens
 
-Rival deliberately reuses Rerolled's (sister site, d2roulette.app) flat
+Rival deliberately reuses Rerolled's (sister site, rerolled.io) flat
 DIM-style design system verbatim. Do not invent new tokens.
 
 ## Hard rules (from repo CLAUDE.md)

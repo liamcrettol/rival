@@ -3,7 +3,7 @@
 --
 -- Before running this migration, add two Vault secrets to THIS Supabase
 -- project (Dashboard -> Project Settings -> Vault):
---   cron_app_url = https://rival.d2roulette.app   (no trailing slash)
+--   cron_app_url = https://rival.rerolled.io   (no trailing slash)
 --   cron_secret  = the same value as the CRON_SECRET env var on Vercel
 -- Rotate by updating the Vault entries; no redeploy or migration needed.
 

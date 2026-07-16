@@ -32,7 +32,7 @@ export default async function Dashboard() {
         <div className="mx-auto flex h-[4.5rem] max-w-7xl items-center gap-6 px-4 sm:px-6">
           <span className="text-xl font-bold uppercase tracking-[0.12em]">Rival</span>
           <a
-            href="https://d2roulette.app"
+            href="https://rerolled.io"
             className="text-xs font-bold uppercase tracking-widest text-gray-400 transition-colors hover:text-white"
           >
             Play Rerolled
