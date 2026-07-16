@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import SignInButton from "@/components/SignInButton";
+import BrandMark from "@/components/BrandMark";
 
 // Signed-out landing. Signed-in users go straight to their match history.
 export default async function Home() {
@@ -13,7 +14,10 @@ export default async function Home() {
       <section className="flex w-full flex-1 flex-col items-center justify-center gap-8">
         <div className="text-center space-y-4">
           <p className="section-label text-bungie-blue">Destiny 2</p>
-          <h1 className="text-5xl font-bold uppercase tracking-[0.08em] md:text-6xl">Rival</h1>
+          <div className="flex items-center justify-center gap-3">
+            <BrandMark className="h-11 w-11 md:h-12 md:w-12" />
+            <h1 className="text-5xl font-bold uppercase tracking-[0.08em] md:text-6xl">Rival</h1>
+          </div>
           <p className="mx-auto max-w-md text-sm leading-relaxed text-gray-400">
             Crucible match history and head-to-head records. Sign in and see
             your record against every player you have ever faced: Trials,
