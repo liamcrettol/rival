@@ -39,7 +39,7 @@ export default async function Dashboard() {
             href="https://rerolled.io"
             className="text-xs font-bold uppercase tracking-widest text-gray-400 transition-colors hover:text-white"
           >
-            Play Rerolled
+            Play <span className="text-[#1d4ed8]">Re</span>rolled
           </a>
           <div className="ml-auto flex items-center gap-3">
             <span className="hidden text-sm font-semibold text-gray-300 sm:block">

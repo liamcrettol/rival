@@ -34,7 +34,7 @@ export default async function Home() {
         <span>Made by Invict Software Solutions</span>
         <span aria-hidden="true">·</span>
         <a href="https://rerolled.io" className="inline-flex min-h-[44px] items-center hover:text-gray-400">
-          Play Rerolled
+          Play <span className="text-[#1d4ed8]">Re</span>rolled
         </a>
         <span aria-hidden="true">·</span>
         <Link href="/privacy" className="inline-flex min-h-[44px] items-center hover:text-gray-400">
