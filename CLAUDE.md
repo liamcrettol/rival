@@ -58,3 +58,52 @@ NextAuth v5 beta (custom Bungie provider) / Vercel.
 - Jest, `__tests__/` mirroring source paths, node env via
   `/** @jest-environment node */` for service code. Supabase is mocked with
   the chainable `makeDb(config)` builder pattern from the ported tests.
+- For a change that needs real browser verification beyond what the sandboxed
+  preview supports (e.g. an actual Bungie OAuth redirect round-trip), use the
+  `playwright` MCP server rather than trying to fake it in Jest.
+
+## Superdesign skill (design exploration only, not implementation)
+
+Reach for the `superdesign` skill for real design work — a new page/flow that
+doesn't have a design yet, visual variants, or component extraction. Not for
+implementation-only tickets (its own trigger rule says so); do those as
+ordinary code changes.
+
+- External CLI (`npx --yes @superdesign/cli@latest`), talks to
+  superdesign.dev; first use needs an interactive `... login`. Never pass
+  secrets, tokens, or real player data through `--context-file`/`-p` — same
+  caution as any other external service.
+- First run here builds `.superdesign/init/` before any design work —
+  expected. Confirm `.superdesign/tmp/` lands in `.gitignore`.
+- **This repo shares Rerolled's design system verbatim** (see the "Design
+  system" section above: zero border radius, no gradients/glassmorphism, the
+  `bungie.*` tokens). Write `.superdesign/design-system.md` from that section
+  plus this repo's real `globals.css`/`tailwind.config.ts` — don't let the
+  tool default to a generic SaaS look just because Rival's current landing
+  page is sparse. Sparse isn't the same as undesigned; match Rerolled's flat
+  DIM aesthetic, don't invent a new brand for Rival.
+- **Biggest opportunity in this repo**: everything past sign-in (match
+  history, head-to-head comparison, player profile) was ported from
+  Rerolled's old dashboard as data plumbing and has never had a design pass
+  of its own. Once the landing page (or a first page) has an approved draft,
+  use `execute-flow-pages` to generate the rest of that flow styled after it.
+- Always reproduces the current UI pixel-perfectly before proposing
+  variations (the skill's own hard rule) — don't skip that step.
+
+## Other installed plugins (local to this repo, 2026-07-16)
+
+All three below are installed at **local scope** (`.claude/settings.local.json`,
+gitignored, personal to this checkout) — not active in other projects on this machine.
+
+- **Superpowers** (`obra/superpowers-marketplace`) adds hard-worded skills:
+  `brainstorming` (design approval gate before creative work), `test-driven-development`,
+  `systematic-debugging`, `verification-before-completion`, plus `using-git-worktrees` and
+  code-review dispatch skills. Good defaults, but don't let the brainstorming/TDD gate add
+  ceremony to small, clearly-scoped fixes — reserve it for genuinely new features or
+  ambiguous asks.
+- **`static-analysis`** (semgrep/codeql) is available for a manual security-audit pass —
+  relevant here given Bungie token handling and server-side DB access. Neither CLI is
+  installed on this machine yet (`pip install semgrep`; CodeQL needs the CLI bundle from
+  github.com/github/codeql-cli-binaries). Both gate on explicit approval before scanning.
+- **`karpathy-guidelines`** reinforces conventions already in this file (surgical diffs,
+  no speculative abstractions) — no reconciliation needed.

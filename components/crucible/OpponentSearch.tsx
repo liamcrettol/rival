@@ -105,9 +105,11 @@ function RivalryList({
               <span className="mt-0.5 block text-[10px] text-gray-500">{leader.encounters} meetings · Last {formatDate(leader.lastPlayedAt)}</span>
             </span>
             <span className="shrink-0 font-mono text-[11px] font-bold">
-              <span className="text-green-300">{leader.wins}W</span>
-              <span className="mx-1 text-gray-700">/</span>
-              <span className="text-red-300">{leader.losses}L</span>
+              {kind === "wins" ? (
+                <span className="text-green-300">{leader.wins}W</span>
+              ) : (
+                <span className="text-red-300">{leader.losses}L</span>
+              )}
             </span>
           </button>
         ))}
@@ -116,7 +118,7 @@ function RivalryList({
   );
 }
 
-export default function OpponentSearch() {
+export default function OpponentSearch({ children }: { children?: React.ReactNode } = {}) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<OpponentSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -272,39 +274,19 @@ export default function OpponentSearch() {
   }
 
   return (
-    <section className="panel mb-5" aria-labelledby="opponent-search-heading">
-      <div className="border-b border-bungie-border px-4 py-4 sm:px-5">
+    <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
+      <div className="w-full min-w-0 max-w-5xl flex-1 space-y-6">
+        <section className="panel" aria-labelledby="opponent-search-heading">
+      <div className="border-b border-bungie-border px-6 py-8 sm:px-8">
+       <div className="max-w-3xl">
         <p className="section-label">Guardian search</p>
-        <h2 id="opponent-search-heading" className="mt-1 text-lg font-bold text-white">Find your history against anyone</h2>
-        <p className="mt-1 text-xs leading-relaxed text-gray-400">
+        <h2 id="opponent-search-heading" className="mt-1 text-2xl font-bold tracking-tight text-white">Find your history against anyone</h2>
+        <p className="mt-2 text-sm leading-relaxed text-gray-400">
           Search a Bungie Name. Players from your history appear first; Bungie results show whether you have ever met.
         </p>
 
-        {leadersLoading ? (
-          <div className="mt-4 flex items-center justify-center gap-2 border border-bungie-border bg-bungie-dark/35 py-8 text-xs text-gray-500">
-            <LoaderCircle className="animate-spin" size={14} /> Ranking your rivalries…
-          </div>
-        ) : leaders && (leaders.mostDefeated.length > 0 || leaders.toughestRivals.length > 0) ? (
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            <RivalryList
-              title="Most Defeated"
-              subtitle="Guardians you have beaten most"
-              leaders={leaders.mostDefeated}
-              kind="wins"
-              onChoose={(leader) => choose(leaderAsSearchResult(leader))}
-            />
-            <RivalryList
-              title="Toughest Rivals"
-              subtitle="Guardians who have beaten you most"
-              leaders={leaders.toughestRivals}
-              kind="losses"
-              onChoose={(leader) => choose(leaderAsSearchResult(leader))}
-            />
-          </div>
-        ) : null}
-
-        <div className="relative mt-4">
-          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={17} />
+        <div className="relative mt-6">
+          <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={19} />
           <input
             value={query}
             onChange={(event) => {
@@ -321,9 +303,9 @@ export default function OpponentSearch() {
             aria-autocomplete="list"
             aria-expanded={results.length > 0}
             aria-controls="opponent-search-results"
-            className="h-11 w-full border border-bungie-border bg-bungie-dark pl-10 pr-20 text-sm text-white placeholder:text-gray-600 focus:border-bungie-blue focus:outline-none"
+            className="h-14 w-full border border-bungie-border bg-bungie-dark pl-12 pr-20 text-base text-white placeholder:text-gray-600 focus:border-bungie-blue focus:outline-none"
           />
-          <div className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-2">
+          <div className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center gap-2">
             {searching && <LoaderCircle className="animate-spin text-bungie-blue" size={16} />}
             {query && (
               <button type="button" onClick={clear} aria-label="Clear player search" className="text-gray-500 hover:text-white">
@@ -385,6 +367,7 @@ export default function OpponentSearch() {
           <p className="mt-2 text-xs text-gray-500">No Bungie players found.</p>
         )}
         {searchError && <p className="mt-2 text-xs text-red-300">{searchError}</p>}
+       </div>
       </div>
 
       {selected && (
@@ -485,6 +468,35 @@ export default function OpponentSearch() {
           ) : null}
         </div>
       )}
-    </section>
+        </section>
+
+        {children}
+      </div>
+
+      <aside className="w-full space-y-6 xl:w-[320px] xl:shrink-0">
+        {leadersLoading ? (
+          <div className="flex items-center justify-center gap-2 border border-bungie-border bg-bungie-dark/35 py-8 text-xs text-gray-500">
+            <LoaderCircle className="animate-spin" size={14} /> Ranking your rivalries…
+          </div>
+        ) : leaders && (leaders.mostDefeated.length > 0 || leaders.toughestRivals.length > 0) ? (
+          <>
+            <RivalryList
+              title="Most Defeated"
+              subtitle="Guardians you have beaten most"
+              leaders={leaders.mostDefeated}
+              kind="wins"
+              onChoose={(leader) => choose(leaderAsSearchResult(leader))}
+            />
+            <RivalryList
+              title="Toughest Rivals"
+              subtitle="Guardians who have beaten you most"
+              leaders={leaders.toughestRivals}
+              kind="losses"
+              onChoose={(leader) => choose(leaderAsSearchResult(leader))}
+            />
+          </>
+        ) : null}
+      </aside>
+    </div>
   );
 }

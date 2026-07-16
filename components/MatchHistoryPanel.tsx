@@ -221,7 +221,7 @@ export default function MatchHistoryPanel({
       <div className="panel flex min-h-[240px] flex-1 flex-col p-4">
         <div className="mb-2 flex items-center justify-between gap-3">
           <div>
-            <p className="section-label">Match Reports</p>
+            <p className="section-label">Your Match Reports</p>
             {(syncStatus === "queued" || syncStatus === "syncing") && (
               <p className="mt-1 flex items-center gap-1.5 text-[9px] uppercase tracking-[0.15em] text-bungie-blue/75">
                 <RefreshCw size={9} className="animate-spin" /> Importing Crucible history
