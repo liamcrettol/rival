@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import MatchHistoryPanel from "@/components/MatchHistoryPanel";
 import CrucibleHistorySync from "@/components/CrucibleHistorySync";
+import BrandMark from "@/components/BrandMark";
 import SignOutButton from "@/components/SignOutButton";
 import { getCrucibleMatchHistory } from "@/lib/crucible/matchHistory";
 import { queueCrucibleSync } from "@/lib/crucible/queueSync";
@@ -30,7 +31,10 @@ export default async function Dashboard() {
     <div className="min-h-screen bg-bungie-dark">
       <header className="border-b border-bungie-border">
         <div className="mx-auto flex h-[4.5rem] max-w-7xl items-center gap-6 px-4 sm:px-6">
-          <span className="text-xl font-bold uppercase tracking-[0.12em]">Rival</span>
+          <span className="flex items-center gap-2.5">
+            <BrandMark className="h-7 w-7" />
+            <span className="text-xl font-bold uppercase tracking-[0.12em]">Rival</span>
+          </span>
           <a
             href="https://rerolled.io"
             className="text-xs font-bold uppercase tracking-widest text-gray-400 transition-colors hover:text-white"
