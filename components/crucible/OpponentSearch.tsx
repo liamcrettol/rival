@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Globe2, LoaderCircle, Search, ShieldCheck, X } from "lucide-react";
+import { Globe2, LoaderCircle, Search, ShieldAlert, ShieldCheck, Trophy, X } from "lucide-react";
 import { bungieImg } from "@/lib/destiny/constants";
 import { MatchCard } from "@/components/MatchHistoryPanel";
 import type { SeasonMatch } from "@/types/platform";
@@ -9,6 +9,7 @@ import type {
   CrucibleModeBucket,
   HeadToHeadSummary,
   OpponentSearchResult,
+  RivalryLeader,
 } from "@/lib/crucible/types";
 
 const FILTERS: Array<{ key: "all" | CrucibleModeBucket; label: string }> = [
@@ -36,9 +37,83 @@ interface DetailResponse {
   nextCursor: string | null;
 }
 
+interface RivalryLeadersResponse {
+  mostDefeated: RivalryLeader[];
+  toughestRivals: RivalryLeader[];
+}
+
 function formatDate(value: string | null) {
   if (!value) return "Never";
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function leaderAsSearchResult(leader: RivalryLeader): OpponentSearchResult {
+  return {
+    membershipId: leader.membershipId,
+    membershipType: leader.membershipType,
+    displayName: leader.displayName,
+    platformDisplayName: null,
+    emblemPath: leader.emblemPath,
+    source: "history",
+    hasHistory: true,
+    summary: null,
+  };
+}
+
+function RivalryList({
+  title,
+  subtitle,
+  leaders,
+  kind,
+  onChoose,
+}: {
+  title: string;
+  subtitle: string;
+  leaders: RivalryLeader[];
+  kind: "wins" | "losses";
+  onChoose: (leader: RivalryLeader) => void;
+}) {
+  const Icon = kind === "wins" ? Trophy : ShieldAlert;
+  return (
+    <div className="border border-bungie-border bg-bungie-dark/35">
+      <div className="flex items-center gap-2 border-b border-bungie-border px-3 py-2.5">
+        <Icon size={14} className={kind === "wins" ? "text-green-300" : "text-red-300"} />
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-200">{title}</p>
+          <p className="mt-0.5 text-[10px] text-gray-500">{subtitle}</p>
+        </div>
+      </div>
+      <div className="divide-y divide-bungie-border/60">
+        {leaders.map((leader) => (
+          <button
+            key={leader.membershipId}
+            type="button"
+            onClick={() => onChoose(leader)}
+            className="grid w-full grid-cols-[1.25rem_2.25rem_1fr_auto] items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-bungie-dark/80"
+          >
+            <span className="font-mono text-[11px] font-bold text-gray-600">#{leader.rank}</span>
+            {bungieImg(leader.emblemPath) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={bungieImg(leader.emblemPath)} alt="" className="h-9 w-9 border border-white/10 object-cover" />
+            ) : (
+              <span className="flex h-9 w-9 items-center justify-center border border-white/10 bg-bungie-surface text-xs font-bold text-gray-600">
+                {leader.displayName.slice(0, 1).toUpperCase()}
+              </span>
+            )}
+            <span className="min-w-0">
+              <span className="block truncate text-xs font-semibold text-white">{leader.displayName}</span>
+              <span className="mt-0.5 block text-[10px] text-gray-500">{leader.encounters} meetings · Last {formatDate(leader.lastPlayedAt)}</span>
+            </span>
+            <span className="shrink-0 font-mono text-[11px] font-bold">
+              <span className="text-green-300">{leader.wins}W</span>
+              <span className="mx-1 text-gray-700">/</span>
+              <span className="text-red-300">{leader.losses}L</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function OpponentSearch() {
@@ -52,6 +127,8 @@ export default function OpponentSearch() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [mode, setMode] = useState<"all" | CrucibleModeBucket>("all");
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [leaders, setLeaders] = useState<RivalryLeadersResponse | null>(null);
+  const [leadersLoading, setLeadersLoading] = useState(true);
   const searchRequest = useRef<AbortController | null>(null);
   const detailRequest = useRef<AbortController | null>(null);
 
@@ -95,6 +172,21 @@ export default function OpponentSearch() {
   useEffect(() => () => {
     searchRequest.current?.abort();
     detailRequest.current?.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/crucible/opponents/leaders", { signal: controller.signal })
+      .then(async (response) => {
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error ?? "Unable to load rivalry leaders");
+        setLeaders(body);
+      })
+      .catch((error) => {
+        if ((error as Error).name !== "AbortError") console.error("[rivalry-leaders]", error);
+      })
+      .finally(() => setLeadersLoading(false));
+    return () => controller.abort();
   }, []);
 
   async function loadDetail(
@@ -187,6 +279,29 @@ export default function OpponentSearch() {
         <p className="mt-1 text-xs leading-relaxed text-gray-400">
           Search a Bungie Name. Players from your history appear first; Bungie results show whether you have ever met.
         </p>
+
+        {leadersLoading ? (
+          <div className="mt-4 flex items-center justify-center gap-2 border border-bungie-border bg-bungie-dark/35 py-8 text-xs text-gray-500">
+            <LoaderCircle className="animate-spin" size={14} /> Ranking your rivalries…
+          </div>
+        ) : leaders && (leaders.mostDefeated.length > 0 || leaders.toughestRivals.length > 0) ? (
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            <RivalryList
+              title="Most Defeated"
+              subtitle="Guardians you have beaten most"
+              leaders={leaders.mostDefeated}
+              kind="wins"
+              onChoose={(leader) => choose(leaderAsSearchResult(leader))}
+            />
+            <RivalryList
+              title="Toughest Rivals"
+              subtitle="Guardians who have beaten you most"
+              leaders={leaders.toughestRivals}
+              kind="losses"
+              onChoose={(leader) => choose(leaderAsSearchResult(leader))}
+            />
+          </div>
+        ) : null}
 
         <div className="relative mt-4">
           <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={17} />

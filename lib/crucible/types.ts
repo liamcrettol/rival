@@ -49,6 +49,19 @@ export interface OpponentSearchResult {
   summary: HeadToHeadSummary | null;
 }
 
+export interface RivalryLeader {
+  rank: number;
+  membershipId: string;
+  membershipType: number | null;
+  displayName: string;
+  emblemPath: string | null;
+  encounters: number;
+  wins: number;
+  losses: number;
+  unknown: number;
+  lastPlayedAt: string;
+}
+
 export interface CrucibleSyncState {
   user_id: string;
   status: "queued" | "syncing" | "complete" | "failed";
