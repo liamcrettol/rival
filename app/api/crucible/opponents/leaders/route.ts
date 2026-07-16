@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth/helpers";
-import { adminSupabase } from "@/lib/supabase/admin";
+import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import type { RivalryLeader } from "@/lib/crucible/types";
 
 interface LeaderRow {
@@ -19,7 +19,10 @@ interface LeaderRow {
 export async function GET() {
   try {
     const session = await requireSession();
-    const { data, error } = await adminSupabase.rpc("get_h2h_rivalry_leaders", {
+    // This aggregate can exceed the app-wide 1.2s Supabase budget for users
+    // with large histories, so give this authenticated dashboard query room.
+    const supabase = createAdminSupabaseClient(5_000);
+    const { data, error } = await supabase.rpc("get_h2h_rivalry_leaders", {
       p_viewer_user_id: session.userId,
       p_limit: 5,
     });
@@ -27,7 +30,7 @@ export async function GET() {
     const rows = (data ?? []) as LeaderRow[];
     const membershipIds = [...new Set(rows.map((row) => row.opponent_membership_id))];
     const { data: emblemRows, error: emblemError } = membershipIds.length > 0
-      ? await adminSupabase.rpc("get_latest_player_emblems", { p_membership_ids: membershipIds })
+      ? await supabase.rpc("get_latest_player_emblems", { p_membership_ids: membershipIds })
       : { data: [], error: null };
     if (emblemError) throw new Error(`Rivalry emblem lookup failed: ${emblemError.message}`);
     const emblems = new Map<string, string>(

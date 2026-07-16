@@ -11,24 +11,30 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 let client: SupabaseClient | null = null;
 const SUPABASE_REQUEST_TIMEOUT_MS = Number(process.env.SUPABASE_REQUEST_TIMEOUT_MS ?? 1_200);
 
-function timedFetch(input: string | URL | Request, init?: RequestInit) {
-  const timeoutSignal = AbortSignal.timeout(SUPABASE_REQUEST_TIMEOUT_MS);
-  const signal = init?.signal
-    ? AbortSignal.any([init.signal, timeoutSignal])
-    : timeoutSignal;
-  return fetch(input, { ...init, signal });
+export function createAdminSupabaseClient(
+  requestTimeoutMs = SUPABASE_REQUEST_TIMEOUT_MS
+): SupabaseClient {
+  const timedFetch = (input: string | URL | Request, init?: RequestInit) => {
+    const timeoutSignal = AbortSignal.timeout(requestTimeoutMs);
+    const signal = init?.signal
+      ? AbortSignal.any([init.signal, timeoutSignal])
+      : timeoutSignal;
+    return fetch(input, { ...init, signal });
+  };
+
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: { fetch: timedFetch },
+    }
+  );
 }
 
 function getClient(): SupabaseClient {
   if (!client) {
-    client = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: { autoRefreshToken: false, persistSession: false },
-        global: { fetch: timedFetch },
-      }
-    );
+    client = createAdminSupabaseClient();
   }
   return client;
 }
