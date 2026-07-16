@@ -122,7 +122,7 @@ async function repairStaleModeBuckets(
 
 export async function getCrucibleMatchHistory(
   userId: string,
-  options: { limit?: number; db?: Db; resolveActivityDef?: typeof resolveActivity } = {},
+  options: { limit?: number; instanceIds?: string[]; db?: Db; resolveActivityDef?: typeof resolveActivity } = {},
 ): Promise<{ matches: SeasonMatch[]; syncStatus: SeasonStatsSyncStatus }> {
   const db = options.db ?? adminSupabase;
   const resolveDef = options.resolveActivityDef ?? resolveActivity;
@@ -134,13 +134,19 @@ export async function getCrucibleMatchHistory(
   if (accountError || !account?.membership_id) return { matches: [], syncStatus: "idle" };
   const syncStatus = ((syncState as Pick<CrucibleSyncState, "status"> | null)?.status ?? "idle") as SeasonStatsSyncStatus;
 
-  const { data: encounterRows, error: encounterError } = await db.from("crucible_encounters")
-    .select("instance_id, played_at")
-    .eq("viewer_user_id", userId)
-    .order("played_at", { ascending: false })
-    .limit(limit * 12);
-  if (encounterError) throw new Error(`Crucible history lookup failed: ${encounterError.message}`);
-  const instanceIds = [...new Set((encounterRows ?? []).map((row: { instance_id: string }) => row.instance_id))].slice(0, limit);
+  let instanceIds: string[];
+  if (options.instanceIds) {
+    const requestedIds: string[] = options.instanceIds;
+    instanceIds = [...new Set<string>(requestedIds.filter((id) => /^\d{1,30}$/.test(id)))].slice(0, limit);
+  } else {
+    const { data: encounterRows, error: encounterError } = await db.from("crucible_encounters")
+      .select("instance_id, played_at")
+      .eq("viewer_user_id", userId)
+      .order("played_at", { ascending: false })
+      .limit(limit * 12);
+    if (encounterError) throw new Error(`Crucible history lookup failed: ${encounterError.message}`);
+    instanceIds = [...new Set<string>((encounterRows ?? []).map((row: { instance_id: string }) => row.instance_id))].slice(0, limit);
+  }
   if (instanceIds.length === 0) return { matches: [], syncStatus };
 
   // activity_image (migration 050) is additive; if it hasn't been applied yet,

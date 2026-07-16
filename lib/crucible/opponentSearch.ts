@@ -63,6 +63,7 @@ export function flattenBungieSearchResults(
         membershipType: membership.membershipType ?? null,
         displayName: formatBungieName(detail.bungieGlobalDisplayName, detail.bungieGlobalDisplayNameCode),
         platformDisplayName: membership.displayName ?? null,
+        emblemPath: null,
         source: "bungie",
         hasHistory: false,
         summary: null,
@@ -98,6 +99,7 @@ async function searchLocalOpponents(
       membershipType: row.opponent_membership_type,
       displayName: row.opponent_display_name,
       platformDisplayName: null,
+      emblemPath: null,
       source: "history",
       hasHistory: true,
       summary: null,
@@ -161,6 +163,13 @@ export async function searchOpponents(input: {
   }
 
   const results = [...merged.values()].slice(0, 16);
+  const { data: emblemRows, error: emblemError } = await db.rpc("get_latest_player_emblems", {
+    p_membership_ids: results.map((result) => result.membershipId),
+  });
+  if (emblemError) throw new Error(`Opponent emblem lookup failed: ${emblemError.message}`);
+  const emblems = new Map<string, string>(
+    (emblemRows ?? []).map((row: { membership_id: string; emblem_path: string }) => [row.membership_id, row.emblem_path] as const),
+  );
   const summaries = await getHeadToHeadSummaries({
     viewerUserId: input.viewerUserId,
     opponentMembershipIds: results.map((result) => result.membershipId),
@@ -169,6 +178,7 @@ export async function searchOpponents(input: {
   return results
     .map((result) => ({
       ...result,
+      emblemPath: emblems.get(result.membershipId) ?? null,
       hasHistory: Boolean(summaries[result.membershipId]),
       summary: summaries[result.membershipId] ?? null,
     }))

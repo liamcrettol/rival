@@ -30,6 +30,7 @@ describe("flattenBungieSearchResults", () => {
         membershipType: 1,
         displayName: "Guardian#0042",
         platformDisplayName: "current-xbox-name",
+        emblemPath: null,
       }),
     ]);
   });

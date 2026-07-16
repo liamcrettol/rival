@@ -75,7 +75,7 @@ function RosterRow({ player }: { player: SeasonMatchPlayer }) {
   );
 }
 
-function MatchCard({ match }: { match: SeasonMatch }) {
+export function MatchCard({ match }: { match: SeasonMatch }) {
   const loadout = match.loadout.filter((slot) => slot.icon || slot.name);
   const mapImage = bungieImg(match.mapImage) || null;
   const resultLabel = match.result === "win" ? "Win" : match.result === "loss" ? "Loss" : "Report";

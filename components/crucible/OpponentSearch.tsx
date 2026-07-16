@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Globe2, LoaderCircle, Search, ShieldCheck, X } from "lucide-react";
-import { crucibleGameReportUrl } from "@/lib/crucible/modes";
+import { Globe2, LoaderCircle, Search, ShieldCheck, X } from "lucide-react";
+import { bungieImg } from "@/lib/destiny/constants";
+import { MatchCard } from "@/components/MatchHistoryPanel";
+import type { SeasonMatch } from "@/types/platform";
 import type {
   CrucibleModeBucket,
-  HeadToHeadMeeting,
   HeadToHeadSummary,
   OpponentSearchResult,
 } from "@/lib/crucible/types";
@@ -30,7 +31,8 @@ const PLATFORM_NAMES: Record<number, string> = {
 
 interface DetailResponse {
   summary: HeadToHeadSummary | null;
-  matches: HeadToHeadMeeting[];
+  matches: Array<{ instanceId: string }>;
+  reports: SeasonMatch[];
   nextCursor: string | null;
 }
 
@@ -101,7 +103,7 @@ export default function OpponentSearch() {
     cursor?: string,
   ) {
     if (!player.hasHistory) {
-      setDetail({ summary: null, matches: [], nextCursor: null });
+      setDetail({ summary: null, matches: [], reports: [], nextCursor: null });
       return;
     }
     if (!cursor) {
@@ -120,7 +122,11 @@ export default function OpponentSearch() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Unable to load history");
       setDetail((current) => cursor
-        ? { ...body, matches: [...(current?.matches ?? []), ...(body.matches ?? [])] }
+        ? {
+            ...body,
+            matches: [...(current?.matches ?? []), ...(body.matches ?? [])],
+            reports: [...(current?.reports ?? []), ...(body.reports ?? [])],
+          }
         : body);
     } catch (error) {
       if ((error as Error).name !== "AbortError") setSearchError(error instanceof Error ? error.message : "Unable to load history");
@@ -221,8 +227,16 @@ export default function OpponentSearch() {
                   aria-selected={activeIndex === index}
                   onMouseEnter={() => setActiveIndex(index)}
                   onClick={() => choose(result)}
-                  className={`grid w-full grid-cols-[1fr_auto] items-center gap-3 border-b border-bungie-border/70 px-3 py-3 text-left last:border-0 ${activeIndex === index ? "bg-bungie-dark" : "hover:bg-bungie-dark/70"}`}
+                  className={`grid w-full grid-cols-[2.5rem_1fr_auto] items-center gap-3 border-b border-bungie-border/70 px-3 py-2.5 text-left last:border-0 ${activeIndex === index ? "bg-bungie-dark" : "hover:bg-bungie-dark/70"}`}
                 >
+                  {bungieImg(result.emblemPath) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={bungieImg(result.emblemPath)} alt="" className="h-10 w-10 border border-white/10 object-cover" />
+                  ) : (
+                    <span className="flex h-10 w-10 items-center justify-center border border-white/10 bg-bungie-dark text-sm font-bold text-gray-600">
+                      {result.displayName.slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-semibold text-white">{result.displayName}</span>
                     <span className="mt-0.5 block truncate text-[11px] text-gray-500">
@@ -261,12 +275,22 @@ export default function OpponentSearch() {
       {selected && (
         <div className="px-4 py-4 sm:px-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="section-label">Selected guardian</p>
-              <h3 className="mt-1 text-base font-bold text-white">{selected.displayName}</h3>
-              <p className="mt-1 text-[11px] text-gray-500">
-                {selected.membershipType ? PLATFORM_NAMES[selected.membershipType] ?? "Destiny" : "Destiny"} · {selected.membershipId}
-              </p>
+            <div className="flex items-center gap-3">
+              {bungieImg(selected.emblemPath) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={bungieImg(selected.emblemPath)} alt="" className="h-14 w-14 border border-white/10 object-cover" />
+              ) : (
+                <span className="flex h-14 w-14 items-center justify-center border border-white/10 bg-bungie-dark text-lg font-bold text-gray-600">
+                  {selected.displayName.slice(0, 1).toUpperCase()}
+                </span>
+              )}
+              <div>
+                <p className="section-label">Selected guardian</p>
+                <h3 className="mt-1 text-base font-bold text-white">{selected.displayName}</h3>
+                <p className="mt-1 text-[11px] text-gray-500">
+                  {selected.membershipType ? PLATFORM_NAMES[selected.membershipType] ?? "Destiny" : "Destiny"} · {selected.membershipId}
+                </p>
+              </div>
             </div>
             {detail?.summary && (
               <div className="text-right">
@@ -318,27 +342,10 @@ export default function OpponentSearch() {
                   <p className="section-label">Match history</p>
                   <p className="text-[10px] uppercase tracking-wider text-gray-500">Last met {formatDate(detail.summary.lastPlayedAt)}</p>
                 </div>
-                {detail.matches.length > 0 ? (
-                  <div className="divide-y divide-bungie-border/70">
-                    {detail.matches.map((match) => (
-                      <a
-                        key={match.instanceId}
-                        href={crucibleGameReportUrl(match.instanceId, match.mode)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="group grid grid-cols-[1fr_auto] items-center gap-3 px-3 py-3 transition hover:bg-bungie-dark/60"
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate text-xs font-semibold text-gray-100">{match.activityName ?? match.modeName}</span>
-                          <span className="mt-0.5 block text-[11px] text-gray-500">{match.modeName} · {formatDate(match.playedAt)}</span>
-                        </span>
-                        <span className="flex items-center gap-2">
-                          <span className={`font-mono text-xs font-bold ${match.viewerWon === true ? "text-green-300" : match.viewerWon === false ? "text-red-300" : "text-gray-500"}`}>
-                            {match.viewerWon === true ? "W" : match.viewerWon === false ? "L" : "–"}
-                          </span>
-                          <ArrowUpRight className="text-gray-600 transition group-hover:text-bungie-blue" size={14} />
-                        </span>
-                      </a>
+                {detail.reports.length > 0 ? (
+                  <div className="space-y-3 bg-bungie-dark/20 p-3">
+                    {detail.reports.map((report) => (
+                      <MatchCard key={report.instanceId ?? report.runId} match={report} />
                     ))}
                   </div>
                 ) : (

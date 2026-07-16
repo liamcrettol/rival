@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth/helpers";
 import { getHeadToHeadMatches, getHeadToHeadSummary } from "@/lib/crucible/headToHead";
+import { getCrucibleMatchHistory } from "@/lib/crucible/matchHistory";
 
 const querySchema = z.object({
   mode: z.enum(["all", "trials", "competitive", "control", "iron_banner", "other"]).default("all"),
@@ -15,10 +16,15 @@ export async function GET(req: NextRequest, context: { params: Promise<{ members
     if (!/^\d{1,30}$/.test(membershipId)) return NextResponse.json({ error: "Invalid membership ID" }, { status: 400 });
     const query = querySchema.parse(Object.fromEntries(req.nextUrl.searchParams));
     const [summary, detail] = await Promise.all([
-      getHeadToHeadSummary({ viewerUserId: session.userId, opponentMembershipId: membershipId, mode: query.mode }),
+      // Keep the all-mode totals stable while the report list is filtered.
+      getHeadToHeadSummary({ viewerUserId: session.userId, opponentMembershipId: membershipId, mode: "all" }),
       getHeadToHeadMatches({ viewerUserId: session.userId, opponentMembershipId: membershipId, mode: query.mode, cursor: query.cursor }),
     ]);
-    return NextResponse.json({ summary, ...detail });
+    const reports = await getCrucibleMatchHistory(session.userId, {
+      limit: 50,
+      instanceIds: detail.matches.map((meeting) => meeting.instanceId),
+    });
+    return NextResponse.json({ summary, ...detail, reports: reports.matches });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Invalid query" }, { status: 400 });
     const message = error instanceof Error ? error.message : "Unable to load head-to-head detail";

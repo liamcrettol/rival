@@ -43,6 +43,7 @@ export interface OpponentSearchResult {
   membershipType: number | null;
   displayName: string;
   platformDisplayName: string | null;
+  emblemPath: string | null;
   source: "history" | "bungie";
   hasHistory: boolean;
   summary: HeadToHeadSummary | null;
