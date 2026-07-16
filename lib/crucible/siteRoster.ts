@@ -89,5 +89,20 @@ export async function syncSiteCrucibleRoster(): Promise<number> {
     if (error) throw new Error(`Rival mirrored Bungie account update failed: ${error.message}`);
   }
 
+  // Materialize every archived/shared PGCR containing a site member. This is
+  // especially important for accounts whose Bungie activity feed is private:
+  // their matches are still attributable whenever the PGCR reached the site
+  // through another participant or the durable archive.
+  const { error: materializeError } = await adminSupabase.rpc("materialize_sitewide_crucible_viewers", {
+    // A newly discovered user gets their entire known history once. Normal
+    // minute-level runs inspect only PGCRs touched in the last hour. A worker
+    // outage cannot create a gap because no new PGCRs are imported while the
+    // worker is down; resumed imports receive a fresh updated_at timestamp.
+    p_user_ids: missing.length > 0 ? missing.map((account) => account.user_id) : null,
+  });
+  if (materializeError) {
+    throw new Error(`Sitewide archived H2H materialization failed: ${materializeError.message}`);
+  }
+
   return accounts.length;
 }
