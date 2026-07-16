@@ -5,6 +5,7 @@ import CrucibleHistorySync from "@/components/CrucibleHistorySync";
 import SignOutButton from "@/components/SignOutButton";
 import { getCrucibleMatchHistory } from "@/lib/crucible/matchHistory";
 import { queueCrucibleSync } from "@/lib/crucible/queueSync";
+import { materializeKnownCrucibleMatches } from "@/lib/crucible/sync";
 import OpponentSearch from "@/components/crucible/OpponentSearch";
 
 export const dynamic = "force-dynamic";
@@ -13,13 +14,17 @@ export default async function Dashboard() {
   const session = await auth();
   if (!session?.userId) redirect("/");
 
-  const [history] = await Promise.all([
-    getCrucibleMatchHistory(session.userId, { limit: 15 }).catch(() => ({
-      matches: [],
-      syncStatus: "idle" as const,
-    })),
-    queueCrucibleSync(session.userId).catch(() => null),
-  ]);
+  // Sequential, not Promise.all: this is the recovery path for the case the
+  // OAuth callback's own queue+materialize work didn't finish before the login
+  // redirect (a real possibility in a serverless invocation). Enrolling the
+  // sync-state row must land before materializing, and materializing must land
+  // before the history read, or the read can race ahead of both writes.
+  const state = await queueCrucibleSync(session.userId).catch(() => null);
+  if (state) await materializeKnownCrucibleMatches(session.userId).catch(() => {});
+  const history = await getCrucibleMatchHistory(session.userId, { limit: 15 }).catch(() => ({
+    matches: [],
+    syncStatus: "idle" as const,
+  }));
 
   return (
     <div className="min-h-screen bg-bungie-dark">

@@ -58,6 +58,7 @@ export interface CrucibleSyncState {
   sync_started_at: string | null;
   last_incremental_sync_at: string | null;
   backfill_completed_at: string | null;
+  known_matches_materialized_at: string | null;
   locked_by: string | null;
   locked_until: string | null;
   last_error: string | null;

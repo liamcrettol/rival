@@ -389,4 +389,54 @@ export async function listParkedCrucibleSyncs(db: Db = adminSupabase): Promise<P
   }));
 }
 
+// A user's newest matches show up immediately with syncRecentCrucibleHistory,
+// but any match where an opponent or teammate has already synced their own
+// Rival account was already imported into crucible_matches/crucible_match_players
+// (global, membership_id-keyed tables) before this user ever signed in.
+// materialize_sitewide_crucible_viewers (migration 014) turns that already-known
+// data into this user's own crucible_match_viewers/crucible_encounters rows via a
+// pure SQL join - no Bungie call, no PGCR read - so it is cheap enough to call on
+// the sign-in and dashboard-render paths directly, gated by a freshness window so
+// a user who is mid-backfill for hours doesn't re-scan on every page view.
+const KNOWN_MATCHES_FRESHNESS_MS = 15 * 60 * 1000;
+
+export async function materializeKnownCrucibleMatches(userId: string, db: Db = adminSupabase): Promise<void> {
+  try {
+    const { data: state } = await db
+      .from("crucible_sync_state")
+      .select("known_matches_materialized_at")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    const lastRun = (state as { known_matches_materialized_at?: string | null } | null)?.known_matches_materialized_at;
+    if (lastRun && Date.now() - new Date(lastRun).getTime() < KNOWN_MATCHES_FRESHNESS_MS) return;
+
+    const { data, error } = await db.rpc("materialize_sitewide_crucible_viewers", { p_user_ids: [userId] });
+    if (error) {
+      console.error("[crucible/materialize] RPC failed:", userId, error.message ?? error);
+      return;
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    console.log(
+      "[crucible/materialize] materialized known matches:",
+      userId,
+      `viewers=${row?.viewers_inserted ?? 0}`,
+      `encounters=${row?.encounters_inserted ?? 0}`,
+    );
+
+    const { error: updateError } = await db
+      .from("crucible_sync_state")
+      .update({ known_matches_materialized_at: new Date().toISOString() })
+      .eq("user_id", userId);
+    if (updateError) {
+      console.error("[crucible/materialize] freshness timestamp write failed:", userId, updateError.message ?? updateError);
+    }
+  } catch (error) {
+    // Best-effort: this runs on the login redirect and dashboard render paths,
+    // so a failure here must never break sign-in or break the page.
+    console.error("[crucible/materialize] unexpected failure:", userId, error instanceof Error ? error.message : error);
+  }
+}
+
 export type { CrucibleActivityHistoryEntry };

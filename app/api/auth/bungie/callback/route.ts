@@ -3,6 +3,7 @@ import { adminSupabase } from "@/lib/supabase/admin";
 import { encryptToken } from "@/lib/auth/encrypt";
 import { encode } from "@auth/core/jwt";
 import { queueCrucibleSync } from "@/lib/crucible/queueSync";
+import { materializeKnownCrucibleMatches } from "@/lib/crucible/sync";
 
 const BASE_URL = process.env.NEXTAUTH_URL!;
 const OAUTH_STATE_COOKIE = "bungie_oauth_state";
@@ -279,10 +280,15 @@ export async function GET(req: NextRequest) {
 
   if (!skipDependentDbWrites && !accountErr) {
     // fromSignIn: fresh tokens were just stored, so this may revive a user who
-    // was parked for a dead refresh token.
-    queueCrucibleSync(userId, undefined, { fromSignIn: true }).catch((error) => {
-      console.error("[bungie/callback] Crucible sync queue failed:", error instanceof Error ? error.message : error);
-    });
+    // was parked for a dead refresh token. Awaited (not fire-and-forget) so the
+    // sitewide materialize below has a guaranteed sync_state row to read/write -
+    // both calls are fast indexed SQL (no Bungie network calls), and the whole
+    // chain is wrapped so a failure here never blocks or breaks sign-in.
+    await queueCrucibleSync(userId, undefined, { fromSignIn: true })
+      .then((state) => state && materializeKnownCrucibleMatches(userId))
+      .catch((error) => {
+        console.error("[bungie/callback] Crucible sync/materialize failed:", error instanceof Error ? error.message : error);
+      });
   }
 
   const isProd = process.env.NODE_ENV === "production";
