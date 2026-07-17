@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Globe2, LoaderCircle, Search, ShieldAlert, ShieldCheck, Trophy, X } from "lucide-react";
+import { ArrowUpRight, Globe2, LoaderCircle, Search, ShieldAlert, ShieldCheck, Trophy, X } from "lucide-react";
 import { bungieImg } from "@/lib/destiny/constants";
 import { MatchCard } from "@/components/MatchHistoryPanel";
 import type { SeasonMatch } from "@/types/platform";
@@ -506,6 +506,13 @@ export default function OpponentSearch({ children }: { children?: React.ReactNod
             />
           </>
         ) : null}
+        <a
+          href="/leaderboard"
+          className="flex items-center justify-between border border-bungie-border bg-bungie-dark/35 px-3 py-2.5 text-xs font-bold uppercase tracking-widest text-gray-300 transition hover:border-bungie-blue hover:text-bungie-blue"
+        >
+          Trials K/D Leaderboard
+          <ArrowUpRight size={14} />
+        </a>
       </aside>
     </div>
   );

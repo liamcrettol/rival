@@ -62,6 +62,23 @@ export interface RivalryLeader {
   lastPlayedAt: string;
 }
 
+export interface TrialsRival {
+  rank: number;
+  membershipId: string;
+  membershipType: number | null;
+  displayName: string;
+  emblemPath: string | null;
+  encounters: number;
+  wins: number;
+  losses: number;
+  unknown: number;
+  lastPlayedAt: string;
+  trialsKills: number;
+  trialsDeaths: number;
+  trialsKd: number;
+  trialsActivitiesEntered: number;
+}
+
 export interface CrucibleSyncState {
   user_id: string;
   status: "queued" | "syncing" | "complete" | "failed";
