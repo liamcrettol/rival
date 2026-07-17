@@ -94,7 +94,7 @@ export async function getMatchHallOfFame(
     const kills = viewer.kills;
     const deaths = viewer.deaths;
     const kd = deaths === 0 ? kills : kills / deaths;
-    if (kills < 5 || kd < 1.75) return [];
+    if (kills < 5 || kd < 1.0) return [];
     const opponentTeamId = rows.find((row) => row.team_id !== null && row.team_id !== viewer.team_id)?.team_id ?? null;
     const ownScore = teamScore(match.team_data, viewer.team_id);
     const opponentScore = teamScore(match.team_data, opponentTeamId);
