@@ -510,7 +510,7 @@ export default function OpponentSearch({ children }: { children?: React.ReactNod
           href="/leaderboard"
           className="flex items-center justify-between border border-bungie-border bg-bungie-dark/35 px-3 py-2.5 text-xs font-bold uppercase tracking-widest text-gray-300 transition hover:border-bungie-blue hover:text-bungie-blue"
         >
-          Trials K/D Leaderboard
+          Match Hall of Fame
           <ArrowUpRight size={14} />
         </a>
       </aside>

@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import BrandMark from "@/components/BrandMark";
 import SignOutButton from "@/components/SignOutButton";
-import TrialsLeaderboard from "@/components/crucible/TrialsLeaderboard";
+import MatchHallOfFame from "@/components/crucible/MatchHallOfFame";
 
 export const dynamic = "force-dynamic";
 
@@ -35,16 +35,16 @@ export default async function LeaderboardPage() {
 
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
         <div className="mb-6">
-          <p className="section-label text-bungie-blue">Trials leaderboard</p>
+          <p className="section-label text-bungie-blue">Match hall of fame</p>
           <h1 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
-            Guardians you have beaten, ranked by how good they actually are
+            Your best 3v3 performances
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-400">
-            Every opponent below is someone you have beaten at least once, in any Crucible mode,
-            ranked by their lifetime Trials of Osiris K/D, pulled directly from Bungie.
+            Your top public 3v3 games, ranked by K/D, kills, and recency. Only performances with
+            at least 5 kills and a 1.75 K/D make the board.
           </p>
         </div>
-        <TrialsLeaderboard />
+        <MatchHallOfFame />
       </main>
     </div>
   );

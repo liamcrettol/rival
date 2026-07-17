@@ -62,22 +62,19 @@ export interface RivalryLeader {
   lastPlayedAt: string;
 }
 
-export interface TrialsRival {
+export interface MatchHallOfFameEntry {
   rank: number;
-  membershipId: string;
-  membershipType: number | null;
-  displayName: string;
-  emblemPath: string | null;
-  encounters: number;
-  wins: number;
-  losses: number;
-  unknown: number;
-  lastPlayedAt: string;
-  trialsKills: number;
-  trialsDeaths: number;
-  trialsKd: number;
-  trialsActivitiesEntered: number;
-  matchReportUrl: string | null;
+  instanceId: string;
+  result: "win" | "loss" | "unknown";
+  kd: number;
+  kills: number;
+  deaths: number;
+  assists: number;
+  mode: string;
+  map: string;
+  playedAt: string;
+  score: string | null;
+  matchReportUrl: string;
 }
 
 export interface CrucibleSyncState {
