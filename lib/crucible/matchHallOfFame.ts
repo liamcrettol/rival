@@ -82,6 +82,7 @@ export async function getMatchHallOfFame(
     if (!viewer || viewer.team_id === null) return [];
     if (viewer.is_win !== true) return [];
     const team = rows.filter((row) => row.team_id === viewer.team_id);
+    if (team.length !== 3) return [];
     const opponents = rows.filter((row) => row.team_id !== null && row.team_id !== viewer.team_id);
     const kills = viewer.kills ?? 0;
     const deaths = viewer.deaths ?? 0;
