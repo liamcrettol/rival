@@ -35,14 +35,9 @@ export default async function LeaderboardPage() {
 
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
         <div className="mb-6">
-          <p className="section-label text-bungie-blue">Match hall of fame</p>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
-            Your best 3v3 wins
+          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+            Match hall of fame
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-400">
-            Your 3v3 wins against opponents with a 1.5+ lifetime Trials K/D, ranked by your K/D,
-            then kills; recency only breaks ties.
-          </p>
         </div>
         <MatchHallOfFame />
       </main>
