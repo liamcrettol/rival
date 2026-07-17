@@ -472,6 +472,12 @@ export default function OpponentSearch({ children }: { children?: React.ReactNod
       </div>
 
       <div className="min-w-0 max-w-5xl [grid-area:history]">
+        {selected && (
+          <div className="mb-3 flex items-center gap-3">
+            <span className="section-label whitespace-nowrap">Your Overall Match History</span>
+            <span className="h-px flex-1 bg-bungie-border" />
+          </div>
+        )}
         {children}
       </div>
 
