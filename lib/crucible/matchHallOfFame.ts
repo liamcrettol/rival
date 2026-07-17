@@ -60,8 +60,7 @@ export async function getMatchHallOfFame(
   const [{ data: matches, error: matchError }, { data: players, error: playerError }] = await Promise.all([
     db.from("crucible_matches")
       .select("instance_id, activity_mode, activity_modes, mode_bucket, activity_name, activity_image, period, team_data, is_private")
-      .in("instance_id", instanceIds)
-      .eq("is_private", false),
+      .in("instance_id", instanceIds),
     db.from("crucible_match_players")
       .select("instance_id, membership_id, membership_type, display_name, team_id, is_win, kills, deaths, assists")
       .in("instance_id", instanceIds),
@@ -82,12 +81,10 @@ export async function getMatchHallOfFame(
     if (!viewer || viewer.team_id === null) return [];
     if (viewer.is_win !== true) return [];
     const team = rows.filter((row) => row.team_id === viewer.team_id);
-    if (team.length !== 3 || viewer.kills === null || viewer.deaths === null) return [];
     const opponents = rows.filter((row) => row.team_id !== null && row.team_id !== viewer.team_id);
-    const kills = viewer.kills;
-    const deaths = viewer.deaths;
+    const kills = viewer.kills ?? 0;
+    const deaths = viewer.deaths ?? 0;
     const kd = deaths === 0 ? kills : kills / deaths;
-    if (kd < 1.0) return [];
     const opponentTeamId = rows.find((row) => row.team_id !== null && row.team_id !== viewer.team_id)?.team_id ?? null;
     const ownScore = teamScore(match.team_data, viewer.team_id);
     const opponentScore = teamScore(match.team_data, opponentTeamId);

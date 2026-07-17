@@ -37,11 +37,11 @@ export default async function LeaderboardPage() {
         <div className="mb-6">
           <p className="section-label text-bungie-blue">Match hall of fame</p>
           <h1 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
-            Your best 3v3 performances
+            Your best wins
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-400">
-            Your top public 3v3 wins against opponents with a 1.75+ lifetime Trials K/D, ranked
-            by your K/D, then kills; recency only breaks ties. Each performance requires a 1.0+ K/D.
+            Your wins against opponents with a 1.75+ lifetime Trials K/D, ranked by your K/D,
+            then kills; recency only breaks ties.
           </p>
         </div>
         <MatchHallOfFame />
