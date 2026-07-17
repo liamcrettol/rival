@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     const { data: accounts, error: accountError } = await db.from("bungie_accounts").select("user_id");
     if (accountError) throw new Error(`Backfill account lookup failed: ${accountError.message}`);
     const candidateResults = await Promise.all((accounts ?? []).map(async (account: { user_id: string }) => {
-      const result = await db.rpc("get_trials_backfill_candidates_for_user", { p_viewer_user_id: account.user_id, p_limit: 100 });
+      const result = await db.rpc("get_trials_backfill_candidates_for_user", { p_viewer_user_id: account.user_id, p_limit: 300 });
       if (result.error) throw new Error(`Backfill candidate lookup failed: ${result.error.message}`);
       return result.data ?? [];
     }));

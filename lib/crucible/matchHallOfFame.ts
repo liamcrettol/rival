@@ -1,4 +1,4 @@
-import { adminSupabase } from "@/lib/supabase/admin";
+import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { listTrialsStats } from "@/lib/crucible/trialsStatsStore";
 import { refreshOpponents } from "@/lib/crucible/trialsBackfill";
 import { crucibleGameReportUrl, crucibleModeName } from "./modes";
@@ -41,7 +41,14 @@ export async function getMatchHallOfFame(
   userId: string,
   options: { db?: Db } = {},
 ): Promise<MatchHallOfFameEntry[]> {
-  const db = options.db ?? adminSupabase;
+  // One shared wall-clock budget for the whole request (route sets
+  // maxDuration=60): the DB scan and the Bungie top-up below both draw from
+  // this same deadline rather than each getting their own full allowance, so
+  // a slow DB phase (measured ~16s worst case for the most prolific user, all-
+  // time) can't stack with the fetch phase and blow past the platform limit.
+  const requestDeadline = Date.now() + 50_000;
+  // Default adminSupabase has a 1.2s timeout, too short for a full-history scan.
+  const db = options.db ?? createAdminSupabaseClient(25_000);
   const { data: account, error: accountError } = await db.from("bungie_accounts")
     .select("membership_id")
     .eq("user_id", userId)
@@ -49,11 +56,13 @@ export async function getMatchHallOfFame(
   if (accountError) throw new Error(`Match hall of fame account lookup failed: ${accountError.message}`);
   if (!account?.membership_id) return [];
 
+  // Full history, not just recent games - a legendary win from a year ago is
+  // exactly the kind of thing this feature exists to surface, and capping to
+  // "most recent" silently excluded most of a prolific player's history
+  // (measured 22k+ all-time win matches vs. a 5000-row recency cap).
   const { data: encounterRows, error: encounterError } = await db.from("crucible_encounters")
-    .select("instance_id, played_at")
-    .eq("viewer_user_id", userId)
-    .order("played_at", { ascending: false })
-    .limit(5000);
+    .select("instance_id")
+    .eq("viewer_user_id", userId);
   if (encounterError) throw new Error(`Match hall of fame history lookup failed: ${encounterError.message}`);
   const instanceIds = [...new Set((encounterRows ?? []).map((row: { instance_id: string }) => row.instance_id))];
   if (instanceIds.length === 0) return [];
@@ -157,10 +166,8 @@ export async function getMatchHallOfFame(
     .filter((ref) => !cachedStats.has(ref.membershipId))
     .sort((a, b) => sampleKd(b.membershipId) - sampleKd(a.membershipId))
     .slice(0, 250);
-  if (missingRefs.length > 0) {
-    // The route now sets maxDuration=60; leave headroom for the DB queries
-    // above/below and response serialization.
-    await refreshOpponents(missingRefs, { concurrency: 8, deadlineMs: Date.now() + 40_000 });
+  if (missingRefs.length > 0 && Date.now() < requestDeadline) {
+    await refreshOpponents(missingRefs, { concurrency: 8, deadlineMs: requestDeadline });
     cachedStats = await listTrialsStats(refs.map((ref) => ref.membershipId));
   }
   const lifetimeStats = new Map<string, number>();
