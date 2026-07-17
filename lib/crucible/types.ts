@@ -77,6 +77,7 @@ export interface TrialsRival {
   trialsDeaths: number;
   trialsKd: number;
   trialsActivitiesEntered: number;
+  matchReportUrl: string | null;
 }
 
 export interface CrucibleSyncState {

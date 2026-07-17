@@ -1,14 +1,13 @@
--- Trials K/D leaderboard: "your record against the best Trials players you
--- have faced." The opponents' lifetime Trials K/D itself is fetched from
--- Bungie's public stats endpoint and cached in Appwrite (see
--- lib/crucible/trialsStatsStore.ts), not Postgres - this repo already uses
--- Appwrite for PGCR blobs and keeps that boundary for external/cached data.
--- These two functions only expose the locally-owned half of the leaderboard:
--- the viewer's own W/L record against opponents faced in Trials matches.
+-- The Trials K/D leaderboard's win requirement should count a win in ANY
+-- Crucible mode, not just Trials matches specifically - the opponent's
+-- Trials K/D is a skill signal, not a restriction on where you beat them.
+-- Also returns the most recent win's instance_id/mode so the UI can link
+-- to that match's public report (crucible.report / trials.report, via
+-- lib/crucible/modes.ts's crucibleGameReportUrl). Both functions changed
+-- their return shape, so drop before recreate.
 
--- All Trials opponents the viewer has faced, with the viewer's W/L record
--- against each. Unranked - the API route ranks these by the opponent's
--- Appwrite-cached Trials K/D once both halves are joined in application code.
+drop function if exists public.get_trials_encounter_aggregate(text);
+
 create or replace function public.get_trials_encounter_aggregate(
   p_viewer_user_id text
 )
@@ -20,7 +19,9 @@ returns table(
   wins bigint,
   losses bigint,
   unknown bigint,
-  last_played_at timestamptz
+  last_played_at timestamptz,
+  last_win_instance_id text,
+  last_win_mode text
 )
 language sql
 stable
@@ -35,10 +36,13 @@ as $$
     count(*) filter (where encounters.viewer_won is true) as wins,
     count(*) filter (where encounters.viewer_won is false) as losses,
     count(*) filter (where encounters.viewer_won is null) as unknown,
-    max(encounters.played_at) as last_played_at
+    max(encounters.played_at) as last_played_at,
+    (array_agg(encounters.instance_id order by encounters.played_at desc)
+      filter (where encounters.viewer_won is true))[1] as last_win_instance_id,
+    (array_agg(encounters.mode_bucket order by encounters.played_at desc)
+      filter (where encounters.viewer_won is true))[1] as last_win_mode
   from public.crucible_encounters encounters
   where encounters.viewer_user_id = p_viewer_user_id
-    and encounters.mode_bucket = 'trials'
     and not exists (
       select 1
       from public.rivalry_exclusions exclusions
@@ -53,11 +57,11 @@ $$;
 revoke all on function public.get_trials_encounter_aggregate(text) from public;
 grant execute on function public.get_trials_encounter_aggregate(text) to service_role;
 
--- Every distinct opponent ever faced in a Trials match, across all viewers,
--- ordered by how many total encounters they're involved in. The sync-trials-kd
--- cron walks this list (checking Appwrite for what's already cached/stale) to
--- decide who to fetch next, so the most-relevant opponents get backfilled
--- first instead of an arbitrary order.
+-- Backfill priority should likewise consider every opponent ever faced, not
+-- just ones met specifically in Trials, since a Control-only opponent can
+-- still have a real (and worth-caching) lifetime Trials K/D.
+drop function if exists public.get_distinct_trials_opponents(integer);
+
 create or replace function public.get_distinct_trials_opponents(
   p_limit integer default 200
 )
@@ -75,7 +79,6 @@ as $$
     (array_agg(encounters.opponent_membership_type order by encounters.played_at desc)
       filter (where encounters.opponent_membership_type is not null))[1] as membership_type
   from public.crucible_encounters encounters
-  where encounters.mode_bucket = 'trials'
   group by encounters.opponent_membership_id
   order by count(*) desc
   limit greatest(1, least(p_limit, 1000));
@@ -83,9 +86,3 @@ $$;
 
 revoke all on function public.get_distinct_trials_opponents(integer) from public;
 grant execute on function public.get_distinct_trials_opponents(integer) to service_role;
-
--- Reuses the generic ping_cron_endpoint(path) helper from migration 010.
--- Every 2 minutes (not 15): each run is time-budgeted to ~45s of Bungie
--- calls, so a 2-minute cadence backfills the cache much faster during the
--- initial ramp-up without runs overlapping.
-select cron.schedule('ping-sync-trials-kd', '*/2 * * * *', $$select public.ping_cron_endpoint('/api/cron/sync-trials-kd')$$);

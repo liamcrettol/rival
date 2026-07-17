@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LoaderCircle, Skull } from "lucide-react";
+import { ArrowUpRight, LoaderCircle, Skull } from "lucide-react";
 import { bungieImg } from "@/lib/destiny/constants";
 import type { TrialsRival } from "@/lib/crucible/types";
 
@@ -45,10 +45,11 @@ export default function TrialsLeaderboard() {
     return (
       <div className="border border-bungie-border bg-bungie-dark/50 px-4 py-8 text-center">
         <Skull className="mx-auto text-gray-600" size={24} />
-        <p className="mt-3 text-sm font-semibold text-white">No ranked opponents yet</p>
+        <p className="mt-3 text-sm font-semibold text-white">No wins to show yet</p>
         <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-gray-500">
           Trials K/D for the players you have faced is fetched from Bungie in the background
-          and fills in gradually. Check back soon.
+          and fills in gradually. This list only shows opponents you have beaten at least once,
+          so check back soon.
         </p>
       </div>
     );
@@ -73,18 +74,26 @@ export default function TrialsLeaderboard() {
             )}
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold text-white">{rival.displayName}</span>
-              <span className="mt-0.5 block text-[10px] text-gray-500">
-                {rival.encounters} meetings in Trials &middot; Last {formatDate(rival.lastPlayedAt)}
+              <span className="mt-0.5 flex items-center gap-2 text-[10px] text-gray-500">
+                Last {formatDate(rival.lastPlayedAt)}
+                {rival.matchReportUrl && (
+                  <a
+                    href={rival.matchReportUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-gray-500 transition hover:text-bungie-blue"
+                  >
+                    View win <ArrowUpRight size={10} />
+                  </a>
+                )}
               </span>
             </span>
             <span className="text-right">
               <span className="block font-mono text-sm font-bold text-bungie-blue">{rival.trialsKd.toFixed(2)} KD</span>
               <span className="mt-0.5 block text-[9px] uppercase tracking-wider text-gray-500">Their Trials record</span>
             </span>
-            <span className="shrink-0 text-right font-mono text-[11px] font-bold">
-              <span className="text-green-300">{rival.wins}W</span>
-              <span className="mx-1 text-gray-600">/</span>
-              <span className="text-red-300">{rival.losses}L</span>
+            <span className="shrink-0 text-right font-mono text-[11px] font-bold text-green-300">
+              {rival.wins}W
             </span>
           </div>
         ))}

@@ -4,7 +4,8 @@ import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { syncRivalryFriendExclusions } from "@/lib/crucible/rivalryFriends";
 import { isPlaceholderPlayerName, loadCanonicalPlayerIdentities } from "@/lib/crucible/playerIdentity";
 import { listTrialsStats, type TrialsStatsDoc } from "@/lib/crucible/trialsStatsStore";
-import type { TrialsRival } from "@/lib/crucible/types";
+import { crucibleGameReportUrl } from "@/lib/crucible/modes";
+import type { CrucibleModeBucket, TrialsRival } from "@/lib/crucible/types";
 
 const LIMIT = 15;
 const APPWRITE_QUERY_CHUNK = 100;
@@ -18,6 +19,8 @@ interface EncounterAggregateRow {
   losses: number | string;
   unknown: number | string;
   last_played_at: string;
+  last_win_instance_id: string | null;
+  last_win_mode: string | null;
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -56,6 +59,9 @@ export async function GET() {
     }
 
     const ranked = rows
+      // Only opponents you've actually beaten at least once - this is a
+      // highlight reel of wins against tough players, not a full ledger.
+      .filter((row) => Number(row.wins) > 0)
       .map((row) => ({ row, stats: trialsStats.get(row.opponent_membership_id) }))
       .filter((entry): entry is { row: EncounterAggregateRow; stats: TrialsStatsDoc } =>
         !!entry.stats && entry.stats.trialsActivitiesEntered > 0
@@ -95,6 +101,9 @@ export async function GET() {
         trialsDeaths: stats.trialsDeaths,
         trialsKd,
         trialsActivitiesEntered: stats.trialsActivitiesEntered,
+        matchReportUrl: row.last_win_instance_id
+          ? crucibleGameReportUrl(row.last_win_instance_id, row.last_win_mode as CrucibleModeBucket | null)
+          : null,
       };
     });
 

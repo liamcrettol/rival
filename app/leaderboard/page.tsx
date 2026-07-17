@@ -37,10 +37,11 @@ export default async function LeaderboardPage() {
         <div className="mb-6">
           <p className="section-label text-bungie-blue">Trials leaderboard</p>
           <h1 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
-            Your record against the best Trials players you have faced
+            Guardians you have beaten, ranked by how good they actually are
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-400">
-            Ranked by each opponent&apos;s lifetime Trials of Osiris K/D, pulled directly from Bungie.
+            Every opponent below is someone you have beaten at least once, in any Crucible mode,
+            ranked by their lifetime Trials of Osiris K/D, pulled directly from Bungie.
           </p>
         </div>
         <TrialsLeaderboard />
