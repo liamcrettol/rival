@@ -10,6 +10,7 @@ interface MatchRow {
   activity_modes: number[] | null;
   mode_bucket: "trials" | "competitive" | "control" | "iron_banner" | "other";
   activity_name: string | null;
+  activity_image: string | null;
   period: string;
   team_data: unknown;
   is_private: boolean;
@@ -18,6 +19,7 @@ interface MatchRow {
 interface PlayerRow {
   instance_id: string;
   membership_id: string;
+  display_name: string;
   team_id: number | null;
   is_win: boolean | null;
   kills: number | null;
@@ -55,11 +57,11 @@ export async function getMatchHallOfFame(
 
   const [{ data: matches, error: matchError }, { data: players, error: playerError }] = await Promise.all([
     db.from("crucible_matches")
-      .select("instance_id, activity_mode, activity_modes, mode_bucket, activity_name, period, team_data, is_private")
+      .select("instance_id, activity_mode, activity_modes, mode_bucket, activity_name, activity_image, period, team_data, is_private")
       .in("instance_id", instanceIds)
       .eq("is_private", false),
     db.from("crucible_match_players")
-      .select("instance_id, membership_id, team_id, is_win, kills, deaths, assists")
+      .select("instance_id, membership_id, display_name, team_id, is_win, kills, deaths, assists")
       .in("instance_id", instanceIds),
   ]);
   if (matchError) throw new Error(`Match hall of fame match lookup failed: ${matchError.message}`);
@@ -78,13 +80,34 @@ export async function getMatchHallOfFame(
     if (!viewer || viewer.team_id === null) return [];
     const team = rows.filter((row) => row.team_id === viewer.team_id);
     if (team.length !== 3 || viewer.kills === null || viewer.deaths === null) return [];
+    const opponents = rows.filter((row) => row.team_id !== null && row.team_id !== viewer.team_id && row.kills !== null && row.deaths !== null);
+    const qualifyingOpponent = opponents
+      .map((opponent) => {
+        const kills = opponent.kills ?? 0;
+        const deaths = opponent.deaths ?? 0;
+        return { ...opponent, kd: deaths === 0 ? kills : kills / deaths };
+      })
+      .filter((opponent) => opponent.kd >= 1.75)
+      .sort((a, b) => b.kd - a.kd || (b.kills ?? 0) - (a.kills ?? 0))[0];
+    if (!qualifyingOpponent) return [];
     const kills = viewer.kills;
     const deaths = viewer.deaths;
     const kd = deaths === 0 ? kills : kills / deaths;
-    if (kills < 5 || kd < 1.75) return [];
+    if (kills < 5) return [];
     const opponentTeamId = rows.find((row) => row.team_id !== null && row.team_id !== viewer.team_id)?.team_id ?? null;
     const ownScore = teamScore(match.team_data, viewer.team_id);
     const opponentScore = teamScore(match.team_data, opponentTeamId);
+    const toPlayer = (player: PlayerRow) => ({
+      membershipId: player.membership_id,
+      displayName: player.display_name,
+      kills: player.kills,
+      deaths: player.deaths,
+      assists: player.assists,
+      kd: player.kills === null || player.deaths === null
+        ? null
+        : player.deaths === 0 ? player.kills : player.kills / player.deaths,
+      isCurrentUser: player.membership_id === account.membership_id,
+    });
     return [{
       instanceId: match.instance_id,
       result: viewer.is_win === true ? "win" : viewer.is_win === false ? "loss" : "unknown",
@@ -92,6 +115,13 @@ export async function getMatchHallOfFame(
       kills,
       deaths,
       assists: viewer.assists ?? 0,
+      opponentName: qualifyingOpponent.display_name,
+      opponentKd: qualifyingOpponent.kd,
+      team: team.map(toPlayer).sort((a, b) => (b.kills ?? -1) - (a.kills ?? -1)),
+      opponents: opponents.map(toPlayer).sort((a, b) => (b.kills ?? -1) - (a.kills ?? -1)),
+      teamScore: ownScore,
+      opponentScore,
+      mapImage: match.activity_image,
       mode: crucibleModeName({ activityMode: match.activity_mode, activityModes: match.activity_modes ?? [], modeBucket: match.mode_bucket }),
       map: match.activity_name ?? "Unknown map",
       playedAt: match.period,

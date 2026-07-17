@@ -70,11 +70,28 @@ export interface MatchHallOfFameEntry {
   kills: number;
   deaths: number;
   assists: number;
+  opponentName: string;
+  opponentKd: number;
+  team: MatchHallOfFamePlayer[];
+  opponents: MatchHallOfFamePlayer[];
+  teamScore: number | null;
+  opponentScore: number | null;
+  mapImage: string | null;
   mode: string;
   map: string;
   playedAt: string;
   score: string | null;
   matchReportUrl: string;
+}
+
+export interface MatchHallOfFamePlayer {
+  membershipId: string;
+  displayName: string;
+  kills: number | null;
+  deaths: number | null;
+  assists: number | null;
+  kd: number | null;
+  isCurrentUser: boolean;
 }
 
 export interface CrucibleSyncState {

@@ -40,8 +40,8 @@ export default async function LeaderboardPage() {
             Your best 3v3 performances
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-400">
-            Your top public 3v3 games, ranked by K/D, kills, and recency. Only performances with
-            at least 5 kills and a 1.75 K/D make the board.
+            Your top public 3v3 games against opponents who posted a 1.75+ K/D, ranked by your
+            K/D, kills, and recency. Each performance requires at least 5 kills.
           </p>
         </div>
         <MatchHallOfFame />
