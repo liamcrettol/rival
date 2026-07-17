@@ -303,6 +303,27 @@ export async function claimCrucibleSync(
   return row?.user_id ? row as CrucibleSyncState : null;
 }
 
+// Atomically claim one specific user's queued row, instead of the next
+// queued row cron-wide. Used by the dashboard's first-sign-in synchronous
+// backfill chunk: a plain conditional UPDATE gives the same claim guarantee
+// as claim_crucible_sync's RPC, so if the cron wins the race first this is a
+// zero-row no-op and the caller falls back to the cron as normal.
+export async function claimCrucibleSyncForUser(
+  userId: string,
+  workerId: string,
+  lockSeconds = 90,
+  db: Db = adminSupabase,
+): Promise<CrucibleSyncState | null> {
+  const { data, error } = await db.from("crucible_sync_state").update({
+    status: "syncing",
+    locked_by: workerId,
+    locked_until: new Date(Date.now() + lockSeconds * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq("user_id", userId).eq("status", "queued").select("*").maybeSingle();
+  if (error) throw new Error(`claim_crucible_sync_for_user failed: ${error.message}`);
+  return (data ?? null) as CrucibleSyncState | null;
+}
+
 export async function queueDueCrucibleSyncs(
   staleMinutes = 15,
   db: Db = adminSupabase,

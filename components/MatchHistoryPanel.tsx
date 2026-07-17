@@ -236,7 +236,9 @@ export default function MatchHistoryPanel({
         {matches.length === 0 ? (
           <div className="flex flex-1 items-center justify-center border border-dashed border-bungie-border/70 bg-bungie-dark/25 px-5 text-center">
             <p className="max-w-[18rem] text-sm leading-relaxed text-gray-500">
-              Match reports will appear here as your Crucible history is imported. Recent games land first; older seasons fill in over time.
+              {syncStatus === "queued" || syncStatus === "syncing"
+                ? "Importing your Crucible history. Recent games land first; older seasons fill in over time."
+                : "Match reports will appear here as your Crucible history is imported. Recent games land first; older seasons fill in over time."}
             </p>
           </div>
         ) : (

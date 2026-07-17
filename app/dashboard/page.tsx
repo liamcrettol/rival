@@ -6,10 +6,18 @@ import BrandMark from "@/components/BrandMark";
 import SignOutButton from "@/components/SignOutButton";
 import { getCrucibleMatchHistory } from "@/lib/crucible/matchHistory";
 import { queueCrucibleSync } from "@/lib/crucible/queueSync";
-import { materializeKnownCrucibleMatches } from "@/lib/crucible/sync";
+import {
+  claimCrucibleSyncForUser,
+  materializeKnownCrucibleMatches,
+  syncNextCrucibleHistoryPage,
+} from "@/lib/crucible/sync";
 import OpponentSearch from "@/components/crucible/OpponentSearch";
 
 export const dynamic = "force-dynamic";
+// A first-ever sign-in now runs one real backfill page synchronously below
+// (Bungie + PGCR fetches), so give this route the same headroom as the
+// cron/refresh routes that do the same kind of work.
+export const maxDuration = 30;
 
 export default async function Dashboard() {
   const session = await auth();
@@ -22,6 +30,22 @@ export default async function Dashboard() {
   // before the history read, or the read can race ahead of both writes.
   const state = await queueCrucibleSync(session.userId).catch(() => null);
   if (state) await materializeKnownCrucibleMatches(session.userId).catch(() => {});
+
+  // First-ever sign-in only (never backfilled, never incrementally synced):
+  // run one real backfill page synchronously so the first dashboard paint
+  // already shows more than just the newest handful of games, instead of
+  // waiting on the next 10-minute cron tick. Claimed via a user-scoped
+  // conditional update so this can never race the cron's own queue-wide
+  // claim; a lost race is just a zero-row no-op and we fall back to the cron.
+  const isFirstEverSync = state?.status === "queued"
+    && !state.backfill_completed_at
+    && !state.last_incremental_sync_at;
+  if (isFirstEverSync) {
+    const claimed = await claimCrucibleSyncForUser(session.userId, `dashboard-${session.userId}`)
+      .catch(() => null);
+    if (claimed) await syncNextCrucibleHistoryPage(session.userId).catch(() => {});
+  }
+
   const history = await getCrucibleMatchHistory(session.userId, { limit: 15 }).catch(() => ({
     matches: [],
     syncStatus: "idle" as const,
