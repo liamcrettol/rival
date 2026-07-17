@@ -40,9 +40,8 @@ export default async function LeaderboardPage() {
             Your best 3v3 performances
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-400">
-            Your top public 3v3 wins against opponents who posted a 1.75+ K/D, ranked by your
-            K/D, kills, and recency. Each performance requires a 1.0+ K/D, while the opponent
-            must have a 1.75+ lifetime Trials K/D.
+            Your top public 3v3 wins against opponents with a 1.75+ lifetime Trials K/D, ranked
+            by your K/D, then kills; recency only breaks ties. Each performance requires a 1.0+ K/D.
           </p>
         </div>
         <MatchHallOfFame />

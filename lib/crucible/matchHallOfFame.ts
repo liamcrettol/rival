@@ -1,5 +1,5 @@
 import { adminSupabase } from "@/lib/supabase/admin";
-import { fetchLifetimeTrialsStats } from "@/lib/bungie/trialsStats";
+import { listTrialsStats } from "@/lib/crucible/trialsStatsStore";
 import { crucibleGameReportUrl, crucibleModeName } from "./modes";
 import type { MatchHallOfFameEntry } from "./types";
 
@@ -87,7 +87,7 @@ export async function getMatchHallOfFame(
     const kills = viewer.kills;
     const deaths = viewer.deaths;
     const kd = deaths === 0 ? kills : kills / deaths;
-    if (kills < 5 || kd < 1.0) return [];
+    if (kd < 1.0) return [];
     const opponentTeamId = rows.find((row) => row.team_id !== null && row.team_id !== viewer.team_id)?.team_id ?? null;
     const ownScore = teamScore(match.team_data, viewer.team_id);
     const opponentScore = teamScore(match.team_data, opponentTeamId);
@@ -126,17 +126,12 @@ export async function getMatchHallOfFame(
   });
 
   const refs = [...new Map(entries.flatMap((entry) => entry.candidateOpponents).map((ref) => [ref.membershipId, ref])).values()];
+  const cachedStats = await listTrialsStats(refs.map((ref) => ref.membershipId));
   const lifetimeStats = new Map<string, number>();
-  await Promise.all(refs.map(async (ref) => {
-    try {
-      const stats = await fetchLifetimeTrialsStats(ref.membershipType, ref.membershipId);
-      if (stats && stats.deaths >= 0 && stats.activitiesEntered > 0) {
-        lifetimeStats.set(ref.membershipId, stats.deaths === 0 ? stats.kills : stats.kills / stats.deaths);
-      }
-    } catch (error) {
-      console.warn(`[match-hall-of-fame] lifetime Trials lookup failed for ${ref.membershipId}:`, error instanceof Error ? error.message : error);
-    }
-  }));
+  for (const ref of refs) {
+    const stats = cachedStats.get(ref.membershipId);
+    if (stats && stats.trialsActivitiesEntered > 0) lifetimeStats.set(ref.membershipId, stats.trialsDeaths === 0 ? stats.trialsKills : stats.trialsKills / stats.trialsDeaths);
+  }
 
   return entries.flatMap((entry) => {
     const qualifyingOpponent = entry.candidateOpponents
