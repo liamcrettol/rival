@@ -37,7 +37,7 @@ export async function GET() {
     });
     const { data, error } = await supabase.rpc("get_h2h_rivalry_leaders", {
       p_viewer_user_id: session.userId,
-      p_limit: 5,
+      p_limit: 10,
     });
     if (error) throw new Error(`Rivalry leaderboard lookup failed: ${error.message}`);
     const rows = (data ?? []) as LeaderRow[];
