@@ -140,7 +140,7 @@ export async function getMatchHallOfFame(
   return entries.flatMap((entry) => {
     const qualifyingOpponent = entry.candidateOpponents
       .map((opponent) => ({ ...opponent, kd: lifetimeStats.get(opponent.membershipId) ?? 0 }))
-      .filter((opponent) => opponent.kd >= 1.75)
+      .filter((opponent) => opponent.kd >= 1.5)
       .sort((a, b) => b.kd - a.kd)[0];
     if (!qualifyingOpponent) return [];
     const { candidateOpponents: _candidateOpponents, ...match } = entry;

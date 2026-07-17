@@ -40,7 +40,7 @@ export default async function LeaderboardPage() {
             Your best 3v3 wins
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-400">
-            Your 3v3 wins against opponents with a 1.75+ lifetime Trials K/D, ranked by your K/D,
+            Your 3v3 wins against opponents with a 1.5+ lifetime Trials K/D, ranked by your K/D,
             then kills; recency only breaks ties.
           </p>
         </div>
