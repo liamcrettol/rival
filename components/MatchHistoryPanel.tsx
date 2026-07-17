@@ -218,7 +218,7 @@ export default function MatchHistoryPanel({
 }) {
   return (
     <section className="flex h-full min-h-0 flex-col">
-      <div className="panel flex min-h-[240px] flex-1 flex-col !border-l-2 !border-l-bungie-blue p-4">
+      <div className="panel flex min-h-[240px] flex-1 flex-col p-4">
         <div className="mb-2 flex items-center justify-between gap-3">
           <div>
             <p className="section-label">Your Match Reports</p>

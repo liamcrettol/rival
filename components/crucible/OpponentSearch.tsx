@@ -435,7 +435,7 @@ export default function OpponentSearch({ children }: { children?: React.ReactNod
                 })}
               </div>
 
-              <div className="mt-4 border border-bungie-border">
+              <div className="mt-4 border border-bungie-border !border-l-2 !border-l-bungie-blue">
                 <div className="flex items-center justify-between border-b border-bungie-border px-3 py-2.5">
                   <p className="section-label">Match history</p>
                   <p className="text-[10px] uppercase tracking-wider text-gray-500">Last met {formatDate(detail.summary.lastPlayedAt)}</p>
@@ -476,11 +476,8 @@ export default function OpponentSearch({ children }: { children?: React.ReactNod
           <div className="my-6 border border-bungie-border bg-bungie-dark/60 px-3 py-2.5">
             <div className="flex items-center gap-2">
               <Globe2 size={13} className="text-bungie-blue" />
-              <p className="section-label text-bungie-blue">Your Overall Match History</p>
+              <p className="section-label text-bungie-blue">Your Recent Match History</p>
             </div>
-            <p className="mt-0.5 text-[10px] text-gray-500">
-              Every recent match, not just games against {selected.displayName}
-            </p>
           </div>
         )}
         {children}
