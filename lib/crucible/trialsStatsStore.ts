@@ -57,8 +57,13 @@ export async function getTrialsStats(membershipId: string): Promise<TrialsStatsD
 export async function listTrialsStats(membershipIds: string[]): Promise<Map<string, TrialsStatsDoc>> {
   if (membershipIds.length === 0) return new Map();
   const { Query } = await import("node-appwrite");
-  const result = await (await getDatabases()).listDocuments({ databaseId: env("APPWRITE_DATABASE_ID"), collectionId: process.env.APPWRITE_TRIALS_STATS_COLLECTION_ID || COLLECTION_ID, queries: [Query.equal("$id", membershipIds), Query.limit(membershipIds.length)] });
-  return new Map(result.documents.map((doc) => [doc.$id, fromDocument(doc)] as const));
+  const result = new Map<string, TrialsStatsDoc>();
+  for (let offset = 0; offset < membershipIds.length; offset += 100) {
+    const batch = membershipIds.slice(offset, offset + 100);
+    const response = await (await getDatabases()).listDocuments({ databaseId: env("APPWRITE_DATABASE_ID"), collectionId: process.env.APPWRITE_TRIALS_STATS_COLLECTION_ID || COLLECTION_ID, queries: [Query.equal("$id", batch), Query.limit(batch.length)] });
+    for (const doc of response.documents) result.set(doc.$id, fromDocument(doc));
+  }
+  return result;
 }
 
 export async function upsertTrialsStats(input: { membershipId: string; membershipType: number; trialsKills: number; trialsDeaths: number; trialsActivitiesEntered: number; charactersChecked: number; lastError: string | null }): Promise<void> {
