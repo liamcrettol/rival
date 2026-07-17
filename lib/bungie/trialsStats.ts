@@ -16,6 +16,21 @@ export interface LifetimeTrialsStats {
 }
 
 export async function fetchLifetimeTrialsStats(membershipType: number, membershipId: string): Promise<LifetimeTrialsStats | null> {
+  const aggregate = await bungieGet<CharacterTrialsStatsResponse>(
+    `/Destiny2/${membershipType}/Account/${membershipId}/Character/0/Stats/?groups=General&modes=${TRIALS_MODE}`,
+    "",
+  );
+  const aggregateAllTime = aggregate.trials_of_osiris?.allTime;
+  if (aggregateAllTime) {
+    return {
+      kills: aggregateAllTime.kills?.basic?.value ?? 0,
+      deaths: aggregateAllTime.deaths?.basic?.value ?? 0,
+      activitiesEntered: aggregateAllTime.activitiesEntered?.basic?.value ?? 0,
+    };
+  }
+
+  // Older/private profiles may not support the aggregate form. Keep the
+  // character-by-character fallback for those accounts.
   const account = await bungieGet<AccountStatsResponse>(`/Destiny2/${membershipType}/Account/${membershipId}/Stats/?groups=General`, "");
   const characters = account.characters ?? [];
   if (characters.length === 0) return null;
