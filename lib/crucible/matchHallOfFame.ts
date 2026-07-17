@@ -104,7 +104,7 @@ export async function getMatchHallOfFame(
     });
     return [{
       instanceId: match.instance_id,
-      result: "win",
+      result: "win" as const,
       kd,
       kills,
       deaths,
