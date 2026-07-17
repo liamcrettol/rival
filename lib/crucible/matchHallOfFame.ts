@@ -112,7 +112,13 @@ export async function getMatchHallOfFame(
       opponents: opponents.map(toPlayer).sort((a, b) => (b.kills ?? -1) - (a.kills ?? -1)),
       candidateOpponents: opponents
         .filter((opponent) => opponent.membership_type !== null)
-        .map((opponent) => ({ membershipId: opponent.membership_id, membershipType: opponent.membership_type as number, displayName: opponent.display_name })),
+        .map((opponent) => ({
+          membershipId: opponent.membership_id,
+          membershipType: opponent.membership_type as number,
+          displayName: opponent.display_name,
+          kills: opponent.kills ?? 0,
+          deaths: opponent.deaths ?? 0,
+        })),
       teamScore: ownScore,
       opponentScore,
       mapImage: match.activity_image,
@@ -124,11 +130,37 @@ export async function getMatchHallOfFame(
     }];
   });
 
+  // Aggregate each opponent's own kills/deaths across every appearance in your
+  // win history (data we already have, no Bungie call needed) as a cheap proxy
+  // for how likely they are to actually clear the lifetime K/D bar. A viewer
+  // can easily have thousands of unique opponents (8700+ observed for a single
+  // active user) - fetching an arbitrary/unordered slice of "missing" ones
+  // means most inline top-ups are wasted on opponents who were never going to
+  // qualify. Prioritizing by sample K/D spends the scarce per-request Bungie
+  // budget on the opponents most likely to actually surface a match.
+  const sampleTotals = new Map<string, { kills: number; deaths: number }>();
+  for (const ref of entries.flatMap((entry) => entry.candidateOpponents)) {
+    const totals = sampleTotals.get(ref.membershipId) ?? { kills: 0, deaths: 0 };
+    totals.kills += ref.kills;
+    totals.deaths += ref.deaths;
+    sampleTotals.set(ref.membershipId, totals);
+  }
+  const sampleKd = (membershipId: string): number => {
+    const totals = sampleTotals.get(membershipId);
+    if (!totals) return 0;
+    return totals.deaths > 0 ? totals.kills / totals.deaths : totals.kills;
+  };
+
   const refs = [...new Map(entries.flatMap((entry) => entry.candidateOpponents).map((ref) => [ref.membershipId, ref])).values()];
   let cachedStats = await listTrialsStats(refs.map((ref) => ref.membershipId));
-  const missingRefs = refs.filter((ref) => !cachedStats.has(ref.membershipId)).slice(0, 100);
+  const missingRefs = refs
+    .filter((ref) => !cachedStats.has(ref.membershipId))
+    .sort((a, b) => sampleKd(b.membershipId) - sampleKd(a.membershipId))
+    .slice(0, 250);
   if (missingRefs.length > 0) {
-    await refreshOpponents(missingRefs, { concurrency: 4, deadlineMs: Date.now() + 25_000 });
+    // The route now sets maxDuration=60; leave headroom for the DB queries
+    // above/below and response serialization.
+    await refreshOpponents(missingRefs, { concurrency: 8, deadlineMs: Date.now() + 40_000 });
     cachedStats = await listTrialsStats(refs.map((ref) => ref.membershipId));
   }
   const lifetimeStats = new Map<string, number>();

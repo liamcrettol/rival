@@ -57,10 +57,25 @@ export async function getTrialsStats(membershipId: string): Promise<TrialsStatsD
 export async function listTrialsStats(membershipIds: string[]): Promise<Map<string, TrialsStatsDoc>> {
   if (membershipIds.length === 0) return new Map();
   const { Query } = await import("node-appwrite");
-  const result = new Map<string, TrialsStatsDoc>();
+  const db = await getDatabases();
+  const databaseId = env("APPWRITE_DATABASE_ID");
+  const collectionId = process.env.APPWRITE_TRIALS_STATS_COLLECTION_ID || COLLECTION_ID;
+
+  const batches: string[][] = [];
   for (let offset = 0; offset < membershipIds.length; offset += 100) {
-    const batch = membershipIds.slice(offset, offset + 100);
-    const response = await (await getDatabases()).listDocuments({ databaseId: env("APPWRITE_DATABASE_ID"), collectionId: process.env.APPWRITE_TRIALS_STATS_COLLECTION_ID || COLLECTION_ID, queries: [Query.equal("$id", batch), Query.limit(batch.length)] });
+    batches.push(membershipIds.slice(offset, offset + 100));
+  }
+  // A caller with a large history (thousands of unique opponents) can produce
+  // dozens of 100-id batches. Reading them one at a time made this the
+  // dominant cost of a request - run them concurrently instead.
+  const responses = await Promise.all(
+    batches.map((batch) =>
+      db.listDocuments({ databaseId, collectionId, queries: [Query.equal("$id", batch), Query.limit(batch.length)] })
+    )
+  );
+
+  const result = new Map<string, TrialsStatsDoc>();
+  for (const response of responses) {
     for (const doc of response.documents) result.set(doc.$id, fromDocument(doc));
   }
   return result;
