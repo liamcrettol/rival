@@ -1,4 +1,5 @@
 import { adminSupabase } from "@/lib/supabase/admin";
+import { fetchLifetimeTrialsStats } from "@/lib/bungie/trialsStats";
 import { crucibleGameReportUrl, crucibleModeName } from "./modes";
 import type { MatchHallOfFameEntry } from "./types";
 
@@ -19,6 +20,7 @@ interface MatchRow {
 interface PlayerRow {
   instance_id: string;
   membership_id: string;
+  membership_type: number | null;
   display_name: string;
   team_id: number | null;
   is_win: boolean | null;
@@ -61,7 +63,7 @@ export async function getMatchHallOfFame(
       .in("instance_id", instanceIds)
       .eq("is_private", false),
     db.from("crucible_match_players")
-      .select("instance_id, membership_id, display_name, team_id, is_win, kills, deaths, assists")
+      .select("instance_id, membership_id, membership_type, display_name, team_id, is_win, kills, deaths, assists")
       .in("instance_id", instanceIds),
   ]);
   if (matchError) throw new Error(`Match hall of fame match lookup failed: ${matchError.message}`);
@@ -81,16 +83,7 @@ export async function getMatchHallOfFame(
     if (viewer.is_win !== true) return [];
     const team = rows.filter((row) => row.team_id === viewer.team_id);
     if (team.length !== 3 || viewer.kills === null || viewer.deaths === null) return [];
-    const opponents = rows.filter((row) => row.team_id !== null && row.team_id !== viewer.team_id && row.kills !== null && row.deaths !== null);
-    const qualifyingOpponent = opponents
-      .map((opponent) => {
-        const kills = opponent.kills ?? 0;
-        const deaths = opponent.deaths ?? 0;
-        return { ...opponent, kd: deaths === 0 ? kills : kills / deaths };
-      })
-      .filter((opponent) => opponent.kd >= 1.75)
-      .sort((a, b) => b.kd - a.kd || (b.kills ?? 0) - (a.kills ?? 0))[0];
-    if (!qualifyingOpponent) return [];
+    const opponents = rows.filter((row) => row.team_id !== null && row.team_id !== viewer.team_id);
     const kills = viewer.kills;
     const deaths = viewer.deaths;
     const kd = deaths === 0 ? kills : kills / deaths;
@@ -111,15 +104,16 @@ export async function getMatchHallOfFame(
     });
     return [{
       instanceId: match.instance_id,
-      result: viewer.is_win === true ? "win" : viewer.is_win === false ? "loss" : "unknown",
+      result: "win",
       kd,
       kills,
       deaths,
       assists: viewer.assists ?? 0,
-      opponentName: qualifyingOpponent.display_name,
-      opponentKd: qualifyingOpponent.kd,
       team: team.map(toPlayer).sort((a, b) => (b.kills ?? -1) - (a.kills ?? -1)),
       opponents: opponents.map(toPlayer).sort((a, b) => (b.kills ?? -1) - (a.kills ?? -1)),
+      candidateOpponents: opponents
+        .filter((opponent) => opponent.membership_type !== null)
+        .map((opponent) => ({ membershipId: opponent.membership_id, membershipType: opponent.membership_type as number, displayName: opponent.display_name })),
       teamScore: ownScore,
       opponentScore,
       mapImage: match.activity_image,
@@ -128,10 +122,31 @@ export async function getMatchHallOfFame(
       playedAt: match.period,
       score: ownScore !== null && opponentScore !== null ? `${ownScore}-${opponentScore}` : null,
       matchReportUrl: crucibleGameReportUrl(match.instance_id, match.mode_bucket),
-    } satisfies Omit<MatchHallOfFameEntry, "rank">];
+    }];
   });
 
-  return entries
+  const refs = [...new Map(entries.flatMap((entry) => entry.candidateOpponents).map((ref) => [ref.membershipId, ref])).values()];
+  const lifetimeStats = new Map<string, number>();
+  await Promise.all(refs.map(async (ref) => {
+    try {
+      const stats = await fetchLifetimeTrialsStats(ref.membershipType, ref.membershipId);
+      if (stats && stats.deaths >= 0 && stats.activitiesEntered > 0) {
+        lifetimeStats.set(ref.membershipId, stats.deaths === 0 ? stats.kills : stats.kills / stats.deaths);
+      }
+    } catch (error) {
+      console.warn(`[match-hall-of-fame] lifetime Trials lookup failed for ${ref.membershipId}:`, error instanceof Error ? error.message : error);
+    }
+  }));
+
+  return entries.flatMap((entry) => {
+    const qualifyingOpponent = entry.candidateOpponents
+      .map((opponent) => ({ ...opponent, kd: lifetimeStats.get(opponent.membershipId) ?? 0 }))
+      .filter((opponent) => opponent.kd >= 1.75)
+      .sort((a, b) => b.kd - a.kd)[0];
+    if (!qualifyingOpponent) return [];
+    const { candidateOpponents: _candidateOpponents, ...match } = entry;
+    return [{ ...match, opponentName: qualifyingOpponent.displayName, opponentKd: qualifyingOpponent.kd } satisfies Omit<MatchHallOfFameEntry, "rank">];
+  })
     .sort((a, b) => b.kd - a.kd || b.kills - a.kills || new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime())
     .slice(0, 10)
     .map((entry, index) => ({ ...entry, rank: index + 1 }));
