@@ -473,9 +473,14 @@ export default function OpponentSearch({ children }: { children?: React.ReactNod
 
       <div className="min-w-0 max-w-5xl [grid-area:history]">
         {selected && (
-          <div className="mb-3 flex items-center gap-3">
-            <span className="section-label whitespace-nowrap">Your Overall Match History</span>
-            <span className="h-px flex-1 bg-bungie-border" />
+          <div className="my-6 border border-bungie-border bg-bungie-dark/60 px-3 py-2.5">
+            <div className="flex items-center gap-2">
+              <Globe2 size={13} className="text-bungie-blue" />
+              <p className="section-label text-bungie-blue">Your Overall Match History</p>
+            </div>
+            <p className="mt-0.5 text-[10px] text-gray-500">
+              Every recent match, not just games against {selected.displayName}
+            </p>
           </div>
         )}
         {children}
