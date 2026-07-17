@@ -99,6 +99,14 @@ export function crucibleGameReportUrl(
   return `https://${host}/pgcr/${encodeURIComponent(instanceId)}`;
 }
 
+// A player's trials.report profile covers both their Trials and general
+// Crucible stats on one page, so this is used for any player regardless of
+// which mode their qualifying match was in - no need to branch by mode like
+// crucibleGameReportUrl does for per-match report links.
+export function trialsReportPlayerUrl(membershipType: number, membershipId: string): string {
+  return `https://trials.report/report/${membershipType}/${encodeURIComponent(membershipId)}`;
+}
+
 // Specific game-type names for the match card, so a match reads "Clash" or
 // "Rumble" instead of the coarse "Other" bucket. Playlist markers (Trials, Iron
 // Banner, Competitive) win first; otherwise we name the specific game type from

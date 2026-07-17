@@ -72,6 +72,7 @@ export interface MatchHallOfFameEntry {
   assists: number;
   opponentName: string;
   opponentKd: number;
+  opponentTrialsReportUrl: string;
   team: MatchHallOfFamePlayer[];
   opponents: MatchHallOfFamePlayer[];
   teamScore: number | null;
@@ -86,12 +87,14 @@ export interface MatchHallOfFameEntry {
 
 export interface MatchHallOfFamePlayer {
   membershipId: string;
+  membershipType: number | null;
   displayName: string;
   kills: number | null;
   deaths: number | null;
   assists: number | null;
   kd: number | null;
   isCurrentUser: boolean;
+  trialsReportUrl: string | null;
 }
 
 export interface CrucibleSyncState {

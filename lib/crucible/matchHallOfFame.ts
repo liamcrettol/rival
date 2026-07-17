@@ -1,7 +1,7 @@
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { listTrialsStats } from "@/lib/crucible/trialsStatsStore";
 import { refreshOpponents } from "@/lib/crucible/trialsBackfill";
-import { crucibleGameReportUrl, crucibleModeName } from "./modes";
+import { crucibleGameReportUrl, crucibleModeName, trialsReportPlayerUrl } from "./modes";
 import type { MatchHallOfFameEntry } from "./types";
 
 type Db = any;
@@ -101,6 +101,7 @@ export async function getMatchHallOfFame(
     const opponentScore = teamScore(match.team_data, opponentTeamId);
     const toPlayer = (player: PlayerRow) => ({
       membershipId: player.membership_id,
+      membershipType: player.membership_type,
       displayName: player.display_name,
       kills: player.kills,
       deaths: player.deaths,
@@ -109,6 +110,9 @@ export async function getMatchHallOfFame(
         ? null
         : player.deaths === 0 ? player.kills : player.kills / player.deaths,
       isCurrentUser: player.membership_id === account.membership_id,
+      trialsReportUrl: player.membership_type !== null
+        ? trialsReportPlayerUrl(player.membership_type, player.membership_id)
+        : null,
     });
     return [{
       instanceId: match.instance_id,
@@ -183,7 +187,12 @@ export async function getMatchHallOfFame(
       .sort((a, b) => b.kd - a.kd)[0];
     if (!qualifyingOpponent) return [];
     const { candidateOpponents: _candidateOpponents, ...match } = entry;
-    return [{ ...match, opponentName: qualifyingOpponent.displayName, opponentKd: qualifyingOpponent.kd } satisfies Omit<MatchHallOfFameEntry, "rank">];
+    return [{
+      ...match,
+      opponentName: qualifyingOpponent.displayName,
+      opponentKd: qualifyingOpponent.kd,
+      opponentTrialsReportUrl: trialsReportPlayerUrl(qualifyingOpponent.membershipType, qualifyingOpponent.membershipId),
+    } satisfies Omit<MatchHallOfFameEntry, "rank">];
   })
     .sort((a, b) => b.kd - a.kd || b.kills - a.kills || new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime())
     .slice(0, 10)
