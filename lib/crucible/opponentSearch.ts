@@ -1,4 +1,4 @@
-import { adminSupabase } from "@/lib/supabase/admin";
+import { adminSupabase, createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getHeadToHeadSummaries } from "./headToHead";
 import { isPlaceholderPlayerName, loadCanonicalPlayerIdentities } from "./playerIdentity";
 import type { OpponentSearchResult } from "./types";
@@ -164,7 +164,12 @@ export async function searchOpponents(input: {
   }
 
   const results = [...merged.values()].slice(0, 16);
-  const identities = await loadCanonicalPlayerIdentities(db, results.map((result) => result.membershipId));
+  // See matchHistory.ts: this RPC can exceed the app-wide 1.2s budget as
+  // crucible_match_players grows, so give it the same room as the rivalry-leaders route.
+  const identities = await loadCanonicalPlayerIdentities(
+    input.db ?? createAdminSupabaseClient(5_000),
+    results.map((result) => result.membershipId)
+  );
   const summaries = await getHeadToHeadSummaries({
     viewerUserId: input.viewerUserId,
     opponentMembershipIds: results.map((result) => result.membershipId),

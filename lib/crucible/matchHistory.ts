@@ -1,4 +1,4 @@
-import { adminSupabase } from "@/lib/supabase/admin";
+import { adminSupabase, createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { resolveActivity } from "@/lib/bungie/pgcr";
 import type { SeasonMatch, SeasonMatchPlayer } from "@/types/platform";
 
@@ -175,7 +175,13 @@ export async function getCrucibleMatchHistory(
     .map((row) => row.membership_id))];
   if (identityIds.length > 0) {
     try {
-      const identities = await loadCanonicalPlayerIdentities(db, identityIds);
+      // get_latest_player_identities scans/sorts per membership id and has grown
+      // past the app-wide 1.2s budget as crucible_match_players fills in; give it
+      // the same room as the rivalry-leaders route already does for this RPC.
+      const identities = await loadCanonicalPlayerIdentities(
+        options.db ?? createAdminSupabaseClient(5_000),
+        identityIds
+      );
       typedPlayers = typedPlayers.map((row) => {
         const identity = identities.get(row.membership_id);
         if (!identity) return row;
