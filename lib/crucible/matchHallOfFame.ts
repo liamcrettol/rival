@@ -78,6 +78,7 @@ export async function getMatchHallOfFame(
     const rows = playersByMatch.get(match.instance_id) ?? [];
     const viewer = rows.find((row) => row.membership_id === account.membership_id);
     if (!viewer || viewer.team_id === null) return [];
+    if (viewer.is_win !== true) return [];
     const team = rows.filter((row) => row.team_id === viewer.team_id);
     if (team.length !== 3 || viewer.kills === null || viewer.deaths === null) return [];
     const opponents = rows.filter((row) => row.team_id !== null && row.team_id !== viewer.team_id && row.kills !== null && row.deaths !== null);
@@ -93,7 +94,7 @@ export async function getMatchHallOfFame(
     const kills = viewer.kills;
     const deaths = viewer.deaths;
     const kd = deaths === 0 ? kills : kills / deaths;
-    if (kills < 5) return [];
+    if (kills < 5 || kd < 1.75) return [];
     const opponentTeamId = rows.find((row) => row.team_id !== null && row.team_id !== viewer.team_id)?.team_id ?? null;
     const ownScore = teamScore(match.team_data, viewer.team_id);
     const opponentScore = teamScore(match.team_data, opponentTeamId);
