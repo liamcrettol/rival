@@ -1,5 +1,6 @@
 import { adminSupabase } from "@/lib/supabase/admin";
 import { listTrialsStats } from "@/lib/crucible/trialsStatsStore";
+import { refreshOpponents } from "@/lib/crucible/trialsBackfill";
 import { crucibleGameReportUrl, crucibleModeName } from "./modes";
 import type { MatchHallOfFameEntry } from "./types";
 
@@ -123,7 +124,12 @@ export async function getMatchHallOfFame(
   });
 
   const refs = [...new Map(entries.flatMap((entry) => entry.candidateOpponents).map((ref) => [ref.membershipId, ref])).values()];
-  const cachedStats = await listTrialsStats(refs.map((ref) => ref.membershipId));
+  let cachedStats = await listTrialsStats(refs.map((ref) => ref.membershipId));
+  const missingRefs = refs.filter((ref) => !cachedStats.has(ref.membershipId)).slice(0, 100);
+  if (missingRefs.length > 0) {
+    await refreshOpponents(missingRefs, { concurrency: 4, deadlineMs: Date.now() + 25_000 });
+    cachedStats = await listTrialsStats(refs.map((ref) => ref.membershipId));
+  }
   const lifetimeStats = new Map<string, number>();
   for (const ref of refs) {
     const stats = cachedStats.get(ref.membershipId);
