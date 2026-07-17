@@ -51,16 +51,30 @@ export async function fetchLifetimeTrialsStats(
   const characters = account.characters ?? [];
   if (characters.length === 0) return null;
 
+  // Fetch every character's Trials block in parallel rather than sequentially:
+  // an account can have up to ~9 characters (deleted ones included), and the
+  // serial version made this the dominant cost of a backfill (measured ~4x
+  // slower than Promise.all). bungieGet already retries/honors throttling per
+  // call. Promise.all (not allSettled) is deliberate: if any character call
+  // ultimately fails, the whole account fetch rejects so the caller records a
+  // failure and retries later, instead of caching an undercounted K/D. A
+  // character that legitimately has no Trials history returns an empty
+  // trials_of_osiris object (still a success), which contributes nothing.
+  const perCharacter = await Promise.all(
+    characters.map((character) =>
+      bungieGet<CharacterTrialsStatsResponse>(
+        `/Destiny2/${membershipType}/Account/${membershipId}/Character/${character.characterId}/Stats/?groups=General&modes=${TRIALS_MODE}`,
+        ""
+      )
+    )
+  );
+
   let kills = 0;
   let deaths = 0;
   let activitiesEntered = 0;
   let charactersChecked = 0;
 
-  for (const character of characters) {
-    const stats = await bungieGet<CharacterTrialsStatsResponse>(
-      `/Destiny2/${membershipType}/Account/${membershipId}/Character/${character.characterId}/Stats/?groups=General&modes=${TRIALS_MODE}`,
-      ""
-    );
+  for (const stats of perCharacter) {
     const allTime = stats.trials_of_osiris?.allTime;
     if (!allTime) continue;
     kills += allTime.kills?.basic?.value ?? 0;

@@ -3,12 +3,21 @@ import { requireSession } from "@/lib/auth/helpers";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { syncRivalryFriendExclusions } from "@/lib/crucible/rivalryFriends";
 import { isPlaceholderPlayerName, loadCanonicalPlayerIdentities } from "@/lib/crucible/playerIdentity";
-import { listTrialsStats, type TrialsStatsDoc } from "@/lib/crucible/trialsStatsStore";
+import { listTrialsStats, needsTrialsStatsFetch, type TrialsStatsDoc } from "@/lib/crucible/trialsStatsStore";
+import { refreshOpponents, type OpponentRef } from "@/lib/crucible/trialsBackfill";
 import { crucibleGameReportUrl } from "@/lib/crucible/modes";
 import type { CrucibleModeBucket, TrialsRival } from "@/lib/crucible/types";
 
 const LIMIT = 15;
 const APPWRITE_QUERY_CHUNK = 100;
+// On a cache miss, fill in the viewer's most-played uncached opponents inline
+// so their own board populates on their own visit rather than waiting for the
+// global cron to reach them. Bounded to keep page latency in check (each fetch
+// fans out across the account's characters in parallel, ~0.5s apiece at
+// concurrency 4).
+const INLINE_FETCH_MAX = 10;
+// Hard cap on inline fetch latency so a cold board stays responsive.
+const INLINE_FETCH_DEADLINE_MS = 9_000;
 
 interface EncounterAggregateRow {
   opponent_membership_id: string;
@@ -51,17 +60,48 @@ export async function GET() {
     const rows = (data ?? []) as EncounterAggregateRow[];
     if (rows.length === 0) return NextResponse.json({ rivals: [] });
 
-    const membershipIds = rows.map((row) => row.opponent_membership_id);
+    const beatenRows = rows.filter((row) => Number(row.wins) > 0);
+    const membershipIds = beatenRows.map((row) => row.opponent_membership_id);
     const trialsStats = new Map<string, TrialsStatsDoc>();
     for (const batch of chunk(membershipIds, APPWRITE_QUERY_CHUNK)) {
       const batchResult = await listTrialsStats(batch);
       for (const [id, doc] of batchResult) trialsStats.set(id, doc);
     }
 
-    const ranked = rows
-      // Only opponents you've actually beaten at least once - this is a
-      // highlight reel of wins against tough players, not a full ledger.
-      .filter((row) => Number(row.wins) > 0)
+    // Inline top-up: if the viewer has beaten opponents whose lifetime Trials
+    // K/D isn't cached yet, fetch their most-played (by wins) uncached ones now
+    // so their board fills in on their own visit rather than only via the cron.
+    // Bounded by INLINE_FETCH_MAX to keep latency predictable.
+    const needFetch = beatenRows
+      .filter((row) => needsTrialsStatsFetch(trialsStats.get(row.opponent_membership_id)))
+      .sort((a, b) => Number(b.wins) - Number(a.wins))
+      .slice(0, INLINE_FETCH_MAX);
+    if (needFetch.length > 0) {
+      const missingType = needFetch
+        .filter((row) => !row.opponent_membership_type)
+        .map((row) => row.opponent_membership_id);
+      const fetchIdentities = missingType.length > 0
+        ? await loadCanonicalPlayerIdentities(supabase, missingType)
+        : new Map();
+      const refs: OpponentRef[] = [];
+      for (const row of needFetch) {
+        const membershipType = row.opponent_membership_type
+          ?? fetchIdentities.get(row.opponent_membership_id)?.membership_type;
+        if (membershipType) refs.push({ membershipId: row.opponent_membership_id, membershipType });
+      }
+      if (refs.length > 0) {
+        // Cap inline work so a cold board never hangs the page; whatever didn't
+        // finish is filled by the background cron or the next visit.
+        await refreshOpponents(refs, { concurrency: 4, deadlineMs: Date.now() + INLINE_FETCH_DEADLINE_MS });
+        for (const [id, doc] of await listTrialsStats(refs.map((ref) => ref.membershipId))) {
+          trialsStats.set(id, doc);
+        }
+      }
+    }
+
+    // beatenRows is already filtered to opponents you've beaten at least once -
+    // this is a highlight reel of wins against tough players, not a full ledger.
+    const ranked = beatenRows
       .map((row) => ({ row, stats: trialsStats.get(row.opponent_membership_id) }))
       .filter((entry): entry is { row: EncounterAggregateRow; stats: TrialsStatsDoc } =>
         !!entry.stats && entry.stats.trialsActivitiesEntered > 0
