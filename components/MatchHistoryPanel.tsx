@@ -43,7 +43,7 @@ function RosterRow({ player }: { player: SeasonMatchPlayer }) {
           <HeadToHeadChip summary={player.headToHead} opponentName={player.displayName} />
         </div>
       )}
-      <div className="min-w-0 flex-1 pr-8">
+      <div className="min-w-0 flex-1 pr-12">
         {player.trialsReportUrl ? (
           <a
             href={player.trialsReportUrl}

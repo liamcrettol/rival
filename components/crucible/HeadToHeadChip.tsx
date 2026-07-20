@@ -196,10 +196,10 @@ export default function HeadToHeadChip({
         aria-expanded={open}
         aria-label={`Head-to-head record against ${opponentName}`}
         onClick={() => (open ? setOpen(false) : show())}
-        className="flex items-center border border-bungie-border bg-bungie-dark/55 px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none transition hover:border-gray-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-bungie-blue"
+        className="flex items-center border border-bungie-border bg-bungie-dark/55 px-2 py-1 font-mono text-sm font-bold leading-none transition hover:border-gray-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-bungie-blue"
       >
         <span className="text-green-300">{summary.wins}</span>
-        <span className="mx-0.5 text-gray-600">-</span>
+        <span className="mx-1 text-gray-600">-</span>
         <span className="text-red-300">{summary.losses}</span>
       </button>
       {popover}
