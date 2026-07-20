@@ -56,10 +56,29 @@ export async function getMatchHallOfFame(
   if (accountError) throw new Error(`Match hall of fame account lookup failed: ${accountError.message}`);
   if (!account?.membership_id) return [];
 
+  // A count-only query is cheap (index-only scan), unlike reading every
+  // encounter/match/player row below. Use it to short-circuit to a cached
+  // result when the viewer's history hasn't grown since it was last computed.
+  const { count: encounterCount, error: countError } = await db.from("crucible_encounters")
+    .select("instance_id", { count: "exact", head: true })
+    .eq("viewer_user_id", userId);
+  if (countError) throw new Error(`Match hall of fame history count failed: ${countError.message}`);
+  if (!encounterCount) return [];
+
+  const { data: cached, error: cacheError } = await db.from("match_hall_of_fame_cache")
+    .select("encounter_count, entries")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (cacheError) throw new Error(`Match hall of fame cache lookup failed: ${cacheError.message}`);
+  if (cached && cached.encounter_count === encounterCount) {
+    return cached.entries as MatchHallOfFameEntry[];
+  }
+
   // Full history, not just recent games - a legendary win from a year ago is
   // exactly the kind of thing this feature exists to surface, and capping to
   // "most recent" silently excluded most of a prolific player's history
-  // (measured 22k+ all-time win matches vs. a 5000-row recency cap).
+  // (measured 22k+ all-time win matches vs. a 5000-row recency cap). Only
+  // reached on a cache miss, i.e. the first visit after new matches synced.
   const { data: encounterRows, error: encounterError } = await db.from("crucible_encounters")
     .select("instance_id")
     .eq("viewer_user_id", userId);
@@ -180,7 +199,7 @@ export async function getMatchHallOfFame(
     if (stats && stats.trialsActivitiesEntered > 0) lifetimeStats.set(ref.membershipId, stats.trialsDeaths === 0 ? stats.trialsKills : stats.trialsKills / stats.trialsDeaths);
   }
 
-  return entries.flatMap((entry) => {
+  const result = entries.flatMap((entry) => {
     const qualifyingOpponent = entry.candidateOpponents
       .map((opponent) => ({ ...opponent, kd: lifetimeStats.get(opponent.membershipId) ?? 0 }))
       .filter((opponent) => opponent.kd >= 1.5)
@@ -197,4 +216,12 @@ export async function getMatchHallOfFame(
     .sort((a, b) => b.kd - a.kd || b.kills - a.kills || new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime())
     .slice(0, 10)
     .map((entry, index) => ({ ...entry, rank: index + 1 }));
+
+  // Best-effort: a failed cache write shouldn't fail a request that already
+  // has a good result to return.
+  const { error: upsertError } = await db.from("match_hall_of_fame_cache")
+    .upsert({ user_id: userId, encounter_count: encounterCount, entries: result, computed_at: new Date().toISOString() });
+  if (upsertError) console.error(`Match hall of fame cache write failed: ${upsertError.message}`);
+
+  return result;
 }
