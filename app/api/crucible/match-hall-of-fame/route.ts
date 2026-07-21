@@ -11,7 +11,9 @@ export const maxDuration = 60;
 export async function GET() {
   try {
     const session = await requireSession();
-    return NextResponse.json({ performances: await getMatchHallOfFame(session.userId) });
+    let degraded = false;
+    const performances = await getMatchHallOfFame(session.userId, { onDegraded: () => { degraded = true; } });
+    return NextResponse.json({ performances, degraded });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to load match hall of fame";
     return NextResponse.json({ error: message }, { status: message === "Unauthorized" ? 401 : 500 });

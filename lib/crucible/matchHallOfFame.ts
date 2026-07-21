@@ -38,7 +38,7 @@ function teamScore(teamData: unknown, teamId: number | null): number | null {
 
 export async function getMatchHallOfFame(
   userId: string,
-  options: { db?: Db } = {},
+  options: { db?: Db; onDegraded?: () => void } = {},
 ): Promise<MatchHallOfFameEntry[]> {
   // Default adminSupabase has a 1.2s timeout, too short for a full-history scan.
   const db = options.db ?? createAdminSupabaseClient(25_000);
@@ -194,6 +194,7 @@ export async function getMatchHallOfFame(
       userId,
       candidateCount: prioritizedRefs.length,
     });
+    options.onDegraded?.();
     return (cached?.entries as MatchHallOfFameEntry[] | undefined) ?? [];
   }
   const lifetimeStats = new Map<string, number>();
