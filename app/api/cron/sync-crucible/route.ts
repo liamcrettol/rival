@@ -83,7 +83,14 @@ export async function GET(req: NextRequest) {
   const retried: SyncFailure[] = [];
 
   try {
-    const siteAccountsDiscovered = await syncSiteCrucibleRoster();
+    // The roster mirror re-reads Rerolled's whole bungie_accounts/users tables
+    // and re-upserts them on every call, but that roster changes on the order of
+    // days, not minutes. Running it only on the top-of-hour invocation keeps new
+    // Rerolled signups flowing into the backfill within an hour while removing
+    // most of its cost from the other runs. null means "skipped this run", which
+    // is distinct from 0 ("ran, found nothing").
+    const mirrorRoster = new Date().getUTCMinutes() < 5;
+    const siteAccountsDiscovered = mirrorRoster ? await syncSiteCrucibleRoster() : null;
     const automaticallyQueued = await queueDueCrucibleSyncs();
     const queuedBefore = await countDueQueuedSyncs(new Date().toISOString());
 
