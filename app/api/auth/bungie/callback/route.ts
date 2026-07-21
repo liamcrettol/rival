@@ -219,6 +219,11 @@ export async function GET(req: NextRequest) {
     const capacity = await reserveSignupSlot(userId);
     if (!capacity.allowed) return errRedirect("signup_cap_reached");
   } catch (e) {
+    console.error("[bungie/callback] signup capacity verification failed", {
+      site: "rival",
+      userId,
+      reason: e instanceof Error ? e.message : "unknown error",
+    });
     return errRedirect("signup_cap_unavailable", String(e));
   }
 
