@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import MatchHistoryPanel from "@/components/MatchHistoryPanel";
 import CrucibleHistorySync from "@/components/CrucibleHistorySync";
 import BrandMark from "@/components/BrandMark";
+import RerolledNavLink from "@/components/RerolledNavLink";
 import SignOutButton from "@/components/SignOutButton";
 import { getCrucibleMatchHistory } from "@/lib/crucible/matchHistory";
 import { queueCrucibleSync } from "@/lib/crucible/queueSync";
@@ -59,12 +60,7 @@ export default async function Dashboard() {
             <BrandMark className="h-7 w-7" />
             <span className="text-xl font-bold uppercase tracking-[0.12em]">Rival</span>
           </span>
-          <a
-            href="https://rerolled.io"
-            className="text-xs font-bold uppercase tracking-widest text-gray-400 transition-colors hover:text-white"
-          >
-            Play <span className="text-[#1d4ed8]">Re</span>rolled
-          </a>
+          <RerolledNavLink />
           <div className="ml-auto flex items-center gap-3">
             <span className="hidden text-sm font-semibold text-gray-300 sm:block">
               {session.displayName}
