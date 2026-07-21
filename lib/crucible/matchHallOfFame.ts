@@ -1,6 +1,5 @@
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
-import { listTrialsStats } from "@/lib/crucible/trialsStatsStore";
-import { refreshOpponents } from "@/lib/crucible/trialsBackfill";
+import { isTrialsStatsQuotaError, listTrialsStats, type TrialsStatsDoc } from "@/lib/crucible/trialsStatsStore";
 import { crucibleGameReportUrl, crucibleModeName, trialsReportPlayerUrl } from "./modes";
 import type { MatchHallOfFameEntry } from "./types";
 
@@ -41,12 +40,6 @@ export async function getMatchHallOfFame(
   userId: string,
   options: { db?: Db } = {},
 ): Promise<MatchHallOfFameEntry[]> {
-  // One shared wall-clock budget for the whole request (route sets
-  // maxDuration=60): the DB scan and the Bungie top-up below both draw from
-  // this same deadline rather than each getting their own full allowance, so
-  // a slow DB phase (measured ~16s worst case for the most prolific user, all-
-  // time) can't stack with the fetch phase and blow past the platform limit.
-  const requestDeadline = Date.now() + 50_000;
   // Default adminSupabase has a 1.2s timeout, too short for a full-history scan.
   const db = options.db ?? createAdminSupabaseClient(25_000);
   const { data: account, error: accountError } = await db.from("bungie_accounts")
@@ -184,14 +177,24 @@ export async function getMatchHallOfFame(
   };
 
   const refs = [...new Map(entries.flatMap((entry) => entry.candidateOpponents).map((ref) => [ref.membershipId, ref])).values()];
-  let cachedStats = await listTrialsStats(refs.map((ref) => ref.membershipId));
-  const missingRefs = refs
-    .filter((ref) => !cachedStats.has(ref.membershipId))
+  // Appwrite bills each document read. A prolific player can have thousands
+  // of unique opponents, so querying every ID here exhausted the monthly
+  // database-read allowance and made the page fail. The cron backfill already
+  // refreshes missing stats; the request only reads the 250 most promising
+  // cached candidates and never performs a write-side backfill.
+  const prioritizedRefs = refs
     .sort((a, b) => sampleKd(b.membershipId) - sampleKd(a.membershipId))
     .slice(0, 250);
-  if (missingRefs.length > 0 && Date.now() < requestDeadline) {
-    await refreshOpponents(missingRefs, { concurrency: 8, deadlineMs: requestDeadline });
-    cachedStats = await listTrialsStats(refs.map((ref) => ref.membershipId));
+  let cachedStats: Map<string, TrialsStatsDoc>;
+  try {
+    cachedStats = await listTrialsStats(prioritizedRefs.map((ref) => ref.membershipId));
+  } catch (error) {
+    if (!isTrialsStatsQuotaError(error)) throw error;
+    console.warn("[match-hall-of-fame] Trials stats read quota exhausted; serving cached result", {
+      userId,
+      candidateCount: prioritizedRefs.length,
+    });
+    return (cached?.entries as MatchHallOfFameEntry[] | undefined) ?? [];
   }
   const lifetimeStats = new Map<string, number>();
   for (const ref of refs) {

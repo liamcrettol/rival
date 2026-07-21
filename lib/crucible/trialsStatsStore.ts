@@ -41,6 +41,12 @@ function isNotFound(error: unknown): boolean {
   return AppwriteExceptionRef !== null && error instanceof AppwriteExceptionRef && error.code === 404;
 }
 
+export function isTrialsStatsQuotaError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  return normalized.includes("database reads limit") || normalized.includes("current billing cycle") || normalized.includes("rate limit");
+}
+
 export function needsTrialsStatsFetch(doc: TrialsStatsDoc | undefined | null): boolean {
   return !doc || Date.now() - new Date(doc.fetchedAt).getTime() > (doc.lastError ? ERROR_RETRY_MS : FRESH_MS);
 }
