@@ -215,16 +215,29 @@ export async function GET(req: NextRequest) {
     return errRedirect("user_fetch_threw", String(e));
   }
 
-  try {
-    const capacity = await reserveSignupSlot(userId);
-    if (!capacity.allowed) return errRedirect("signup_cap_reached");
-  } catch (e) {
-    console.error("[bungie/callback] signup capacity verification failed", {
-      site: "rival",
-      userId,
-      reason: e instanceof Error ? e.message : "unknown error",
-    });
-    return errRedirect("signup_cap_unavailable", String(e));
+  // Returning users must never be locked out of login by a transient outage
+  // on Rerolled's side of the shared capacity check: only genuinely new
+  // sign-ins need to reserve a slot. A failed/errored local lookup falls
+  // through to the cross-service check below, same as before this change.
+  const { data: existingAccount } = await adminSupabase
+    .from("bungie_accounts")
+    .select("user_id")
+    .eq("user_id", userId)
+    .abortSignal(AbortSignal.timeout(AUTH_DB_WRITE_TIMEOUT_MS))
+    .maybeSingle();
+
+  if (!existingAccount) {
+    try {
+      const capacity = await reserveSignupSlot(userId);
+      if (!capacity.allowed) return errRedirect("signup_cap_reached");
+    } catch (e) {
+      console.error("[bungie/callback] signup capacity verification failed", {
+        site: "rival",
+        userId,
+        reason: e instanceof Error ? e.message : "unknown error",
+      });
+      return errRedirect("signup_cap_unavailable", String(e));
+    }
   }
 
   // Encrypt tokens
