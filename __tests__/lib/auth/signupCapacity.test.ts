@@ -1,6 +1,27 @@
 /** @jest-environment node */
 
-import { reserveSignupSlot } from "@/lib/auth/signupCapacity";
+import { hasExistingBungieAccount, reserveSignupSlot, type SignupCapacityDb } from "@/lib/auth/signupCapacity";
+
+function makeAccountsDb(config: { row: { user_id: string } | null; error?: unknown; throws?: boolean }): SignupCapacityDb {
+  return {
+    from(table: string) {
+      expect(table).toBe("bungie_accounts");
+      return {
+        select: (columns: string) => {
+          expect(columns).toBe("user_id");
+          return {
+            eq: () => ({
+              maybeSingle: async () => {
+                if (config.throws) throw new Error("connection reset");
+                return { data: config.row, error: config.error ?? null };
+              },
+            }),
+          };
+        },
+      };
+    },
+  };
+}
 
 function response(status: number, body: unknown) {
   return {
@@ -76,5 +97,31 @@ describe("shared signup capacity bridge", () => {
 
     await expect(reserveSignupSlot("new-user")).rejects.toThrow("capacity_request_timeout");
     expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("hasExistingBungieAccount", () => {
+  it("returns true when the user already has a linked bungie_accounts row", async () => {
+    const db = makeAccountsDb({ row: { user_id: "existing-user" } });
+
+    await expect(hasExistingBungieAccount("existing-user", db)).resolves.toBe(true);
+  });
+
+  it("returns false for a brand-new user with no linked row", async () => {
+    const db = makeAccountsDb({ row: null });
+
+    await expect(hasExistingBungieAccount("new-user", db)).resolves.toBe(false);
+  });
+
+  it("falls through to false (cross-service check) on a database error, not a false positive", async () => {
+    const db = makeAccountsDb({ row: null, error: { message: "boom" } });
+
+    await expect(hasExistingBungieAccount("some-user", db)).resolves.toBe(false);
+  });
+
+  it("falls through to false (cross-service check) if the lookup throws", async () => {
+    const db = makeAccountsDb({ row: null, throws: true });
+
+    await expect(hasExistingBungieAccount("some-user", db)).resolves.toBe(false);
   });
 });

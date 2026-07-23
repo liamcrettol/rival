@@ -4,7 +4,7 @@ import { encryptToken } from "@/lib/auth/encrypt";
 import { encode } from "@auth/core/jwt";
 import { queueCrucibleSync } from "@/lib/crucible/queueSync";
 import { materializeKnownCrucibleMatches } from "@/lib/crucible/sync";
-import { reserveSignupSlot } from "@/lib/auth/signupCapacity";
+import { hasExistingBungieAccount, reserveSignupSlot } from "@/lib/auth/signupCapacity";
 
 const BASE_URL = process.env.NEXTAUTH_URL!;
 const OAUTH_STATE_COOKIE = "bungie_oauth_state";
@@ -215,16 +215,21 @@ export async function GET(req: NextRequest) {
     return errRedirect("user_fetch_threw", String(e));
   }
 
-  try {
-    const capacity = await reserveSignupSlot(userId);
-    if (!capacity.allowed) return errRedirect("signup_cap_reached");
-  } catch (e) {
-    console.error("[bungie/callback] signup capacity verification failed", {
-      site: "rival",
-      userId,
-      reason: e instanceof Error ? e.message : "unknown error",
-    });
-    return errRedirect("signup_cap_unavailable", String(e));
+  // Existing Rival users must be able to log in even if Rerolled's shared capacity
+  // check is unreachable (#7) — only a first-time signup needs to reserve a slot.
+  const alreadyLinked = await hasExistingBungieAccount(userId, adminSupabase);
+  if (!alreadyLinked) {
+    try {
+      const capacity = await reserveSignupSlot(userId);
+      if (!capacity.allowed) return errRedirect("signup_cap_reached");
+    } catch (e) {
+      console.error("[bungie/callback] signup capacity verification failed", {
+        site: "rival",
+        userId,
+        reason: e instanceof Error ? e.message : "unknown error",
+      });
+      return errRedirect("signup_cap_unavailable", String(e));
+    }
   }
 
   // Encrypt tokens

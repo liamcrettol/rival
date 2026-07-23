@@ -1,3 +1,23 @@
+export type SignupCapacityDb = any; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+// Returning users must never depend on the cross-service capacity check being reachable
+// (#7): only a brand-new Bungie membership ID needs a reserved slot. A failed/errored
+// lookup here falls through to the existing cross-service check rather than assuming
+// either answer, so the 150-user cap guarantee is never weakened for genuinely new users.
+export async function hasExistingBungieAccount(userId: string, db: SignupCapacityDb): Promise<boolean> {
+  try {
+    const { data, error } = await db
+      .from("bungie_accounts")
+      .select("user_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) return false;
+    return !!data;
+  } catch {
+    return false;
+  }
+}
+
 export type SignupCapacityResult = {
   status: "available" | "already_registered" | "capacity_reached";
   allowed: boolean;
