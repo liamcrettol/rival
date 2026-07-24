@@ -215,16 +215,33 @@ export async function GET(req: NextRequest) {
     return errRedirect("user_fetch_threw", String(e));
   }
 
+  // Already-registered Rival users must be able to keep logging in even if the
+  // shared signup-cap sync to Rerolled is down or misconfigured - only a
+  // genuinely new signup needs to consult the cross-site ledger.
+  let isKnownLocalUser = false;
   try {
-    const capacity = await reserveSignupSlot(userId);
-    if (!capacity.allowed) return errRedirect("signup_cap_reached");
-  } catch (e) {
-    console.error("[bungie/callback] signup capacity verification failed", {
-      site: "rival",
-      userId,
-      reason: e instanceof Error ? e.message : "unknown error",
-    });
-    return errRedirect("signup_cap_unavailable", String(e));
+    const { data: existingUser } = await adminSupabase
+      .from("users")
+      .select("id")
+      .eq("id", userId)
+      .maybeSingle();
+    isKnownLocalUser = Boolean(existingUser);
+  } catch {
+    isKnownLocalUser = false;
+  }
+
+  if (!isKnownLocalUser) {
+    try {
+      const capacity = await reserveSignupSlot(userId);
+      if (!capacity.allowed) return errRedirect("signup_cap_reached");
+    } catch (e) {
+      console.error("[bungie/callback] signup capacity verification failed", {
+        site: "rival",
+        userId,
+        reason: e instanceof Error ? e.message : "unknown error",
+      });
+      return errRedirect("signup_cap_unavailable", String(e));
+    }
   }
 
   // Encrypt tokens
