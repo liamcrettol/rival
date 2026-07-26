@@ -4,7 +4,7 @@ import { encryptToken } from "@/lib/auth/encrypt";
 import { encode } from "@auth/core/jwt";
 import { queueCrucibleSync } from "@/lib/crucible/queueSync";
 import { materializeKnownCrucibleMatches } from "@/lib/crucible/sync";
-import { reserveSignupSlot } from "@/lib/auth/signupCapacity";
+import { reserveSignupSlot, releaseSignupSlot } from "@/lib/auth/signupCapacity";
 
 const BASE_URL = process.env.NEXTAUTH_URL!;
 const OAUTH_STATE_COOKIE = "bungie_oauth_state";
@@ -251,6 +251,10 @@ export async function GET(req: NextRequest) {
   const skipDependentDbWrites = userErr && isTransientSupabaseError(userErr);
   if (userErr) {
     if (!isTransientSupabaseError(userErr)) {
+      // The signup slot was already reserved above (on Rerolled's shared
+      // ledger) but no account was ever created here - give it back so a
+      // never-completed signup doesn't permanently shrink the lifetime cap.
+      await releaseSignupSlot(userId);
       return errRedirect("user_upsert_failed", formatSupabaseError(userErr));
     }
     console.error(
