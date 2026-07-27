@@ -195,7 +195,20 @@ export async function getMatchHallOfFame(
       candidateCount: prioritizedRefs.length,
     });
     options.onDegraded?.();
-    return (cached?.entries as MatchHallOfFameEntry[] | undefined) ?? [];
+    const staleEntries = cached?.entries as MatchHallOfFameEntry[] | undefined;
+    if (staleEntries) {
+      // Bump the cache's encounter_count to the freshly computed value so
+      // repeat visits during an Appwrite outage hit the cache fast-path
+      // instead of re-running this full scan (and re-hitting the exhausted
+      // quota) on every request. The entries themselves stay stale until the
+      // next run that succeeds. Skipped when there's no prior cached result
+      // to fall back to, so a brand-new user isn't stuck with an empty
+      // result until their encounter count changes again.
+      const { error: degradedUpsertError } = await db.from("match_hall_of_fame_cache")
+        .upsert({ user_id: userId, encounter_count: encounterCount, entries: staleEntries, computed_at: new Date().toISOString() });
+      if (degradedUpsertError) console.error(`Match hall of fame degraded cache bump failed: ${degradedUpsertError.message}`);
+    }
+    return staleEntries ?? [];
   }
   const lifetimeStats = new Map<string, number>();
   for (const ref of refs) {
