@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertCronAuth } from "@/lib/auth/cron";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
-import { listTrialsStats, needsTrialsStatsFetch } from "@/lib/crucible/trialsStatsStore";
+import { listTrialsStats, needsTrialsStatsFetch, isTrialsStatsQuotaError } from "@/lib/crucible/trialsStatsStore";
 import { refreshOpponents, type OpponentRef } from "@/lib/crucible/trialsBackfill";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +20,23 @@ export async function GET(request: NextRequest) {
       return result.data ?? [];
     }));
     const candidates = [...new Map(candidateResults.flat().map((candidate: { membership_id: string; membership_type: number | null }) => [candidate.membership_id, candidate])).values()];
-    const cached = await listTrialsStats(candidates.map((candidate) => candidate.membership_id));
+
+    let cached;
+    try {
+      cached = await listTrialsStats(candidates.map((candidate) => candidate.membership_id));
+    } catch (error) {
+      if (!isTrialsStatsQuotaError(error)) throw error;
+      // Appwrite read quota exhausted for the billing cycle - this is an
+      // expected, recoverable condition (same as the Hall of Fame read
+      // path), not a cron failure. Skip this run's refresh instead of
+      // reddening it; the next run picks candidates back up once quota
+      // resets.
+      console.error("[cron/sync-trials-kd] Appwrite read quota exhausted, skipping this run", {
+        candidates: candidates.length,
+      });
+      return NextResponse.json({ ok: true, skipped: "appwrite_quota_exhausted", candidates: candidates.length, due: 0 });
+    }
+
     const due: OpponentRef[] = candidates.filter((candidate) => needsTrialsStatsFetch(cached.get(candidate.membership_id)) && candidate.membership_type !== null).slice(0, 150).map((candidate) => ({ membershipId: candidate.membership_id, membershipType: candidate.membership_type as number }));
     const result = await refreshOpponents(due, { concurrency: 6, deadlineMs: Date.now() + 38_000 });
     return NextResponse.json({ ok: true, candidates: candidates.length, due: due.length, ...result });

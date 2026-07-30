@@ -1,6 +1,6 @@
 /** @jest-environment node */
 
-import { reserveSignupSlot } from "@/lib/auth/signupCapacity";
+import { reserveSignupSlot, releaseSignupSlot } from "@/lib/auth/signupCapacity";
 
 function response(status: number, body: unknown) {
   return {
@@ -76,5 +76,48 @@ describe("shared signup capacity bridge", () => {
 
     await expect(reserveSignupSlot("new-user")).rejects.toThrow("capacity_request_timeout");
     expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("releaseSignupSlot", () => {
+  beforeEach(() => {
+    process.env.REROLLED_SYNC_BASE_URL = "https://rerolled.io";
+    process.env.REROLLED_SYNC_SECRET = "secret";
+    global.fetch = jest.fn() as unknown as typeof fetch;
+  });
+
+  it("DELETEs the reservation for an orphaned user id", async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(response(200, { status: "ok" }));
+
+    await releaseSignupSlot("orphaned-user");
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://rerolled.io/api/internal/rival/signup-capacity",
+      expect.objectContaining({
+        method: "DELETE",
+        body: JSON.stringify({ userId: "orphaned-user" }),
+      }),
+    );
+  });
+
+  it("never throws, even when the request fails", async () => {
+    const errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    (global.fetch as jest.Mock).mockRejectedValue(new Error("network down"));
+
+    await expect(releaseSignupSlot("orphaned-user")).resolves.toBeUndefined();
+    expect(errSpy).toHaveBeenCalledWith(
+      "[signupCapacity] failed to release an orphaned slot",
+      expect.objectContaining({ userId: "orphaned-user" }),
+    );
+    errSpy.mockRestore();
+  });
+
+  it("never throws when not configured", async () => {
+    delete process.env.REROLLED_SYNC_BASE_URL;
+    const errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(releaseSignupSlot("orphaned-user")).resolves.toBeUndefined();
+    expect(global.fetch).not.toHaveBeenCalled();
+    errSpy.mockRestore();
   });
 });

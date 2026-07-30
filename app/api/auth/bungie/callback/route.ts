@@ -4,7 +4,7 @@ import { encryptToken } from "@/lib/auth/encrypt";
 import { encode } from "@auth/core/jwt";
 import { queueCrucibleSync } from "@/lib/crucible/queueSync";
 import { materializeKnownCrucibleMatches } from "@/lib/crucible/sync";
-import { reserveSignupSlot } from "@/lib/auth/signupCapacity";
+import { reserveSignupSlot, releaseSignupSlot } from "@/lib/auth/signupCapacity";
 
 const BASE_URL = process.env.NEXTAUTH_URL!;
 const OAUTH_STATE_COOKIE = "bungie_oauth_state";
@@ -215,16 +215,41 @@ export async function GET(req: NextRequest) {
     return errRedirect("user_fetch_threw", String(e));
   }
 
+  // Returning users already hold a signup slot - only a genuinely new sign-in
+  // needs to pay the cross-service capacity check's cost and its fail-closed
+  // risk. Session JWTs last 30 days, so without this every re-login would
+  // otherwise retry the same cross-service call and a transient Rerolled
+  // outage/cold start would block login for Rival's whole existing user
+  // base, not just new signups (#7). A failed or errored local lookup falls
+  // through to the existing capacity check below, so no capacity-safety
+  // guarantee is weakened for new signups.
+  let isReturningUser = false;
   try {
-    const capacity = await reserveSignupSlot(userId);
-    if (!capacity.allowed) return errRedirect("signup_cap_reached");
-  } catch (e) {
-    console.error("[bungie/callback] signup capacity verification failed", {
-      site: "rival",
-      userId,
-      reason: e instanceof Error ? e.message : "unknown error",
-    });
-    return errRedirect("signup_cap_unavailable", String(e));
+    const { data: existingAccount, error: lookupErr } = await adminSupabase
+      .from("bungie_accounts")
+      .select("user_id")
+      .eq("user_id", userId)
+      .abortSignal(AbortSignal.timeout(800))
+      .maybeSingle();
+    isReturningUser = !lookupErr && !!existingAccount;
+  } catch {
+    isReturningUser = false;
+  }
+
+  let reservedNewSlot = false;
+  if (!isReturningUser) {
+    try {
+      const capacity = await reserveSignupSlot(userId);
+      if (!capacity.allowed) return errRedirect("signup_cap_reached");
+      reservedNewSlot = true;
+    } catch (e) {
+      console.error("[bungie/callback] signup capacity verification failed", {
+        site: "rival",
+        userId,
+        reason: e instanceof Error ? e.message : "unknown error",
+      });
+      return errRedirect("signup_cap_unavailable", String(e));
+    }
   }
 
   // Encrypt tokens
@@ -251,6 +276,12 @@ export async function GET(req: NextRequest) {
   const skipDependentDbWrites = userErr && isTransientSupabaseError(userErr);
   if (userErr) {
     if (!isTransientSupabaseError(userErr)) {
+      // The signup slot was already reserved above (on Rerolled's shared
+      // ledger) but no account was ever created here - give it back so a
+      // never-completed signup doesn't permanently shrink the lifetime cap.
+      // Only for a slot this request itself reserved; a returning user's
+      // original slot must never be released here.
+      if (reservedNewSlot) await releaseSignupSlot(userId);
       return errRedirect("user_upsert_failed", formatSupabaseError(userErr));
     }
     console.error(

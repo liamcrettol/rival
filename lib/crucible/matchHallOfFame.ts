@@ -195,7 +195,20 @@ export async function getMatchHallOfFame(
       candidateCount: prioritizedRefs.length,
     });
     options.onDegraded?.();
-    return (cached?.entries as MatchHallOfFameEntry[] | undefined) ?? [];
+    if (!cached) return [];
+    // Bump the stale cache row's encounter_count to the freshly computed
+    // value so the cache-hit fast path (line 66) matches again on the next
+    // visit, instead of re-running this full unbounded scan and re-hitting
+    // the exhausted Appwrite quota on every request for the rest of the
+    // outage (#8). Entries themselves stay stale until the next successful
+    // run; best-effort since a failed bump just means one more re-scan.
+    const { error: staleBumpError } = await db.from("match_hall_of_fame_cache")
+      .update({ encounter_count: encounterCount })
+      .eq("user_id", userId);
+    if (staleBumpError) {
+      console.error(`Match hall of fame stale cache bump failed: ${staleBumpError.message}`);
+    }
+    return cached.entries as MatchHallOfFameEntry[];
   }
   const lifetimeStats = new Map<string, number>();
   for (const ref of refs) {
