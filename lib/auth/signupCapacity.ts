@@ -70,3 +70,37 @@ export async function reserveSignupSlot(userId: string): Promise<SignupCapacityR
       : "capacity_request_failed";
   throw new Error(`Shared signup capacity verification failed: ${code}`);
 }
+
+// Compensates a reserveSignupSlot() call whose Rival account was never
+// actually persisted (e.g. token encryption or the users/bungie_accounts
+// upsert failed non-transiently afterward). Best-effort: swallows its own
+// errors so a release failure never masks the original signup error
+// redirect. Never call this for an already_registered result - that slot
+// belongs to an existing account, not this request.
+export async function releaseSignupSlot(userId: string): Promise<void> {
+  const baseUrl = process.env.REROLLED_SYNC_BASE_URL;
+  const secret = process.env.REROLLED_SYNC_SECRET;
+  if (!baseUrl || !secret) {
+    console.error("[signupCapacity] cannot release signup slot: shared signup capacity is not configured", { userId });
+    return;
+  }
+
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/api/internal/rival/signup-capacity`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${secret}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ userId }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(1_500),
+    });
+    if (!response.ok) throw new Error(`release request failed with status ${response.status}`);
+  } catch (error) {
+    console.error("[signupCapacity] failed to release an abandoned signup slot", {
+      userId,
+      reason: error instanceof Error ? error.message : "unknown error",
+    });
+  }
+}

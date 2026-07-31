@@ -1,6 +1,6 @@
 /** @jest-environment node */
 
-import { reserveSignupSlot } from "@/lib/auth/signupCapacity";
+import { releaseSignupSlot, reserveSignupSlot } from "@/lib/auth/signupCapacity";
 
 function response(status: number, body: unknown) {
   return {
@@ -76,5 +76,45 @@ describe("shared signup capacity bridge", () => {
 
     await expect(reserveSignupSlot("new-user")).rejects.toThrow("capacity_request_timeout");
     expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("releaseSignupSlot", () => {
+  beforeEach(() => {
+    process.env.REROLLED_SYNC_BASE_URL = "https://rerolled.io";
+    process.env.REROLLED_SYNC_SECRET = "secret";
+    global.fetch = jest.fn() as unknown as typeof fetch;
+  });
+
+  it("sends a DELETE to Rerolled's internal endpoint", async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(response(200, { status: "released" }));
+
+    await releaseSignupSlot("abandoned-user");
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://rerolled.io/api/internal/rival/signup-capacity",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("never throws, even when the request fails", async () => {
+    const errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    (global.fetch as jest.Mock).mockRejectedValue(new Error("network error"));
+
+    await expect(releaseSignupSlot("abandoned-user")).resolves.toBeUndefined();
+    expect(errSpy).toHaveBeenCalledWith(
+      "[signupCapacity] failed to release an abandoned signup slot",
+      expect.objectContaining({ userId: "abandoned-user" }),
+    );
+    errSpy.mockRestore();
+  });
+
+  it("logs and returns when the shared secret is not configured", async () => {
+    const errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    delete process.env.REROLLED_SYNC_SECRET;
+
+    await expect(releaseSignupSlot("abandoned-user")).resolves.toBeUndefined();
+    expect(global.fetch).not.toHaveBeenCalled();
+    errSpy.mockRestore();
   });
 });

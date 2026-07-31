@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 // Shared auth gate for cron endpoints. Supabase pg_cron + pg_net sends
@@ -20,7 +21,9 @@ export function assertCronAuth(req: NextRequest): NextResponse | null {
     return null;
   }
 
-  if (req.headers.get("authorization") !== `Bearer ${secret}`) {
+  const expected = `Bearer ${secret}`;
+  const supplied = req.headers.get("authorization") ?? "";
+  if (supplied.length !== expected.length || !timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
