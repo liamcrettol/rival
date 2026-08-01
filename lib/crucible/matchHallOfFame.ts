@@ -5,6 +5,12 @@ import type { MatchHallOfFameEntry } from "./types";
 
 type Db = any;
 
+// Safety valve, not a design cap (#9): the largest account observed so far is
+// 22k+ all-time win matches. This sits far above that so no real account is
+// truncated today, but bounds the otherwise-unbounded scan/payload/timeout
+// risk as accounts keep growing.
+const ENCOUNTER_SCAN_LIMIT = 50_000;
+
 interface MatchRow {
   instance_id: string;
   activity_mode: number | null;
@@ -74,7 +80,8 @@ export async function getMatchHallOfFame(
   // reached on a cache miss, i.e. the first visit after new matches synced.
   const { data: encounterRows, error: encounterError } = await db.from("crucible_encounters")
     .select("instance_id")
-    .eq("viewer_user_id", userId);
+    .eq("viewer_user_id", userId)
+    .limit(ENCOUNTER_SCAN_LIMIT);
   if (encounterError) throw new Error(`Match hall of fame history lookup failed: ${encounterError.message}`);
   const instanceIds = [...new Set((encounterRows ?? []).map((row: { instance_id: string }) => row.instance_id))];
   if (instanceIds.length === 0) return [];

@@ -42,6 +42,14 @@ function isNotFound(error: unknown): boolean {
 }
 
 export function isTrialsStatsQuotaError(error: unknown): boolean {
+  // AppwriteException.code is the reliable signal (429 = rate/quota limited).
+  // Checked structurally rather than via `instanceof AppwriteExceptionRef` so
+  // this doesn't depend on getDatabases() having already run. The message
+  // substrings below are a fallback for the same failure surfaced without a
+  // `code`, and protect against a future SDK/wording change silently
+  // breaking detection.
+  const code = error && typeof error === "object" && "code" in error ? (error as { code?: unknown }).code : undefined;
+  if (code === 429) return true;
   const message = error instanceof Error ? error.message : String(error);
   const normalized = message.toLowerCase();
   return normalized.includes("database reads limit") || normalized.includes("current billing cycle") || normalized.includes("rate limit");

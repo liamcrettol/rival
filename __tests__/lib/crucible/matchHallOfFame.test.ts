@@ -26,6 +26,7 @@ function makeDb(config: {
   players?: Row[];
   onUpdate?: (patch: Row) => void;
   onUpsert?: (row: Row) => void;
+  encounterQueryLimit?: number;
 }) {
   return {
     from(table: string) {
@@ -41,11 +42,23 @@ function makeDb(config: {
       if (table === "crucible_encounters") {
         return {
           select: (_cols: string, opts?: { count?: string; head?: boolean }) => ({
-            eq: async () => {
-              if (opts?.count === "exact" && opts?.head) {
-                return { count: config.encounterCount ?? 0, error: null };
-              }
-              return { data: config.encounterRows ?? [], error: null };
+            eq: () => {
+              const resolveResult = async () => {
+                if (opts?.count === "exact" && opts?.head) {
+                  return { count: config.encounterCount ?? 0, error: null };
+                }
+                return { data: config.encounterRows ?? [], error: null };
+              };
+              // Thenable so the (unlimited) count query can still be awaited
+              // directly, and chainable so the row scan can call .limit().
+              return {
+                limit: (n: number) => {
+                  config.encounterQueryLimit = n;
+                  return resolveResult();
+                },
+                then: (resolve: (value: unknown) => void, reject: (reason?: unknown) => void) =>
+                  resolveResult().then(resolve, reject),
+              };
             },
           }),
         };
@@ -131,5 +144,24 @@ describe("getMatchHallOfFame — Appwrite quota degradation (#8)", () => {
     });
 
     await expect(getMatchHallOfFame("user-1", { db })).rejects.toThrow("boom");
+  });
+});
+
+describe("getMatchHallOfFame — bounded encounter scan (#9)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("caps the encounter history scan instead of reading an unbounded row set", async () => {
+    const config: Parameters<typeof makeDb>[0] = {
+      encounterCount: 5,
+      encounterRows: [],
+      cached: null,
+    };
+    const db = makeDb(config);
+
+    await getMatchHallOfFame("user-1", { db });
+
+    expect(config.encounterQueryLimit).toBe(50_000);
   });
 });
