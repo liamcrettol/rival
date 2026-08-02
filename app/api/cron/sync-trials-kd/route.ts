@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertCronAuth } from "@/lib/auth/cron";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
-import { listTrialsStats, needsTrialsStatsFetch } from "@/lib/crucible/trialsStatsStore";
+import { isTrialsStatsQuotaError, listTrialsStats, needsTrialsStatsFetch, type TrialsStatsDoc } from "@/lib/crucible/trialsStatsStore";
 import { refreshOpponents, type OpponentRef } from "@/lib/crucible/trialsBackfill";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +20,16 @@ export async function GET(request: NextRequest) {
       return result.data ?? [];
     }));
     const candidates = [...new Map(candidateResults.flat().map((candidate: { membership_id: string; membership_type: number | null }) => [candidate.membership_id, candidate])).values()];
-    const cached = await listTrialsStats(candidates.map((candidate) => candidate.membership_id));
+    let cached: Map<string, TrialsStatsDoc>;
+    try {
+      cached = await listTrialsStats(candidates.map((candidate) => candidate.membership_id));
+    } catch (error) {
+      if (!isTrialsStatsQuotaError(error)) throw error;
+      console.warn("[sync-trials-kd] Trials stats read quota exhausted; skipping this run", {
+        candidateCount: candidates.length,
+      });
+      return NextResponse.json({ ok: true, skipped: "quota_exhausted", candidates: candidates.length });
+    }
     const due: OpponentRef[] = candidates.filter((candidate) => needsTrialsStatsFetch(cached.get(candidate.membership_id)) && candidate.membership_type !== null).slice(0, 150).map((candidate) => ({ membershipId: candidate.membership_id, membershipType: candidate.membership_type as number }));
     const result = await refreshOpponents(due, { concurrency: 6, deadlineMs: Date.now() + 38_000 });
     return NextResponse.json({ ok: true, candidates: candidates.length, due: due.length, ...result });
