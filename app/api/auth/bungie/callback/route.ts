@@ -6,7 +6,10 @@ import { queueCrucibleSync } from "@/lib/crucible/queueSync";
 import { materializeKnownCrucibleMatches } from "@/lib/crucible/sync";
 import { reserveSignupSlot, releaseSignupSlot } from "@/lib/auth/signupCapacity";
 
-const BASE_URL = process.env.NEXTAUTH_URL!;
+// A trailing slash here produces "//api/auth/bungie/callback" below, which
+// fails Bungie's exact-match redirect_uri check - strip it defensively
+// rather than relying on NEXTAUTH_URL always being configured correctly.
+const BASE_URL = (process.env.NEXTAUTH_URL ?? "").replace(/\/+$/, "");
 const OAUTH_STATE_COOKIE = "bungie_oauth_state";
 const OAUTH_RETURN_TO_COOKIE = "bungie_oauth_return_to";
 const BUNGIE_REDIRECT_URI =
@@ -259,6 +262,10 @@ export async function GET(req: NextRequest) {
     encryptedAccess = await encryptToken(tokens.access_token);
     if (tokens.refresh_token) encryptedRefresh = await encryptToken(tokens.refresh_token);
   } catch (e) {
+    // Same orphaned-slot risk as the user_upsert_failed branch below: the
+    // signup slot was already reserved above, but encryption failing means
+    // no account will ever be created for it - give it back.
+    if (reservedNewSlot) await releaseSignupSlot(userId);
     return errRedirect("encrypt_failed", String(e));
   }
 
