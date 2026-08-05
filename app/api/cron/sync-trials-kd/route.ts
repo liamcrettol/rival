@@ -7,18 +7,46 @@ import { refreshOpponents, type OpponentRef } from "@/lib/crucible/trialsBackfil
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+// Generous ceiling on the account scan - current user base is far under this,
+// it just stops the fan-out from growing unbounded as the base grows.
+const MAX_BACKFILL_ACCOUNTS = 2000;
+// Same concurrency ceiling refreshOpponents() below already uses for its own
+// Bungie-facing fan-out.
+const ACCOUNT_LOOKUP_CONCURRENCY = 6;
+
+async function mapConcurrently<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = [];
+  const queue = items.map((item, index) => ({ item, index }));
+  const runners = Array.from({ length: Math.min(limit, queue.length) }, async () => {
+    for (;;) {
+      const next = queue.shift();
+      if (!next) return;
+      results[next.index] = await worker(next.item);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
 export async function GET(request: NextRequest) {
   const denied = assertCronAuth(request);
   if (denied) return denied;
   const db = createAdminSupabaseClient(15_000);
   try {
-    const { data: accounts, error: accountError } = await db.from("bungie_accounts").select("user_id");
+    const { data: accounts, error: accountError } = await db.from("bungie_accounts").select("user_id").limit(MAX_BACKFILL_ACCOUNTS);
     if (accountError) throw new Error(`Backfill account lookup failed: ${accountError.message}`);
-    const candidateResults = await Promise.all((accounts ?? []).map(async (account: { user_id: string }) => {
+    // Isolated per-account: one account's RPC failing shouldn't sink the
+    // whole run, since the rest self-heal on the next 15-minute cycle anyway.
+    const candidateResults = await mapConcurrently(accounts ?? [], ACCOUNT_LOOKUP_CONCURRENCY, async (account: { user_id: string }) => {
       const result = await db.rpc("get_trials_backfill_candidates_for_user", { p_viewer_user_id: account.user_id, p_limit: 300 });
-      if (result.error) throw new Error(`Backfill candidate lookup failed: ${result.error.message}`);
+      if (result.error) {
+        console.error("[cron/sync-trials-kd] Backfill candidate lookup failed for account, skipping", {
+          error: result.error.message,
+        });
+        return [];
+      }
       return result.data ?? [];
-    }));
+    });
     const candidates = [...new Map(candidateResults.flat().map((candidate: { membership_id: string; membership_type: number | null }) => [candidate.membership_id, candidate])).values()];
 
     let cached;

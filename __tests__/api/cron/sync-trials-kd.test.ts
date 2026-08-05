@@ -40,9 +40,11 @@ function req() {
 beforeEach(() => {
   jest.clearAllMocks();
   mockDb.from.mockReturnValue({
-    select: jest.fn().mockResolvedValue({
-      data: [{ user_id: "user-1" }],
-      error: null,
+    select: jest.fn().mockReturnValue({
+      limit: jest.fn().mockResolvedValue({
+        data: [{ user_id: "user-1" }],
+        error: null,
+      }),
     }),
   });
   mockDb.rpc.mockResolvedValue({
@@ -72,4 +74,43 @@ it("still 500s on a non-quota Appwrite/lookup failure", async () => {
 
   expect(res.status).toBe(500);
   expect(body.ok).toBe(false);
+});
+
+it("caps the account scan with .limit()", async () => {
+  const limit = jest.fn().mockResolvedValue({ data: [{ user_id: "user-1" }], error: null });
+  mockDb.from.mockReturnValue({ select: jest.fn().mockReturnValue({ limit }) });
+  mockListTrialsStats.mockResolvedValue(new Map());
+  mockRefreshOpponents.mockResolvedValue({ refreshed: 0 });
+
+  await GET(req());
+
+  expect(limit).toHaveBeenCalledWith(2000);
+});
+
+it("skips one account's failed RPC instead of aborting the whole batch", async () => {
+  mockDb.from.mockReturnValue({
+    select: jest.fn().mockReturnValue({
+      limit: jest.fn().mockResolvedValue({
+        data: [{ user_id: "user-bad" }, { user_id: "user-good" }],
+        error: null,
+      }),
+    }),
+  });
+  mockDb.rpc.mockImplementation((_fn: string, args: { p_viewer_user_id: string }) => {
+    if (args.p_viewer_user_id === "user-bad") {
+      return Promise.resolve({ data: null, error: { message: "rpc exploded" } });
+    }
+    return Promise.resolve({ data: [{ membership_id: "opp-1", membership_type: 3 }], error: null });
+  });
+  const errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+  mockListTrialsStats.mockResolvedValue(new Map());
+  mockRefreshOpponents.mockResolvedValue({ refreshed: 1 });
+
+  const res = await GET(req());
+  const body = await res.json();
+
+  expect(res.status).toBe(200);
+  expect(body.ok).toBe(true);
+  expect(body.candidates).toBe(1);
+  errSpy.mockRestore();
 });
