@@ -66,6 +66,7 @@ describe("getHeadToHeadSummaries", () => {
           select: () => chain,
           eq: () => chain,
           order: () => chain,
+          limit: () => chain,
           in: (_column: string, values: string[]) => {
             ids = values;
             if (table === "crucible_encounters") requestedBatches.push(values);

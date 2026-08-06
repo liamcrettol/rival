@@ -10,6 +10,10 @@ import type {
 } from "./types";
 
 const MAX_RECENT_MEETINGS = 12;
+// Safety valve mirroring ENCOUNTER_SCAN_LIMIT in matchHallOfFame.ts - not
+// expected to be hit by any real account, just bounds worst-case payload
+// size/timeout risk for a batch of up to 50 opponents with no existing cap.
+const HEAD_TO_HEAD_SCAN_LIMIT = 50_000;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = any;
@@ -152,7 +156,8 @@ export async function getHeadToHeadSummaries(input: {
       .select("opponent_membership_id, opponent_membership_type, opponent_display_name, instance_id, mode_bucket, viewer_won, played_at")
       .eq("viewer_user_id", input.viewerUserId)
       .in("opponent_membership_id", batch)
-      .order("played_at", { ascending: false });
+      .order("played_at", { ascending: false })
+      .limit(HEAD_TO_HEAD_SCAN_LIMIT);
     if (input.mode && input.mode !== "all") query = query.eq("mode_bucket", input.mode);
     const result = await query;
     if (result.error) throw new Error(`Head-to-head query failed: ${result.error.message}`);
