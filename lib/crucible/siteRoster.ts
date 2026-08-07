@@ -1,5 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
-import { adminSupabase, createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { adminSupabase, createAdminSupabaseClient, withSupabaseTimeout } from "@/lib/supabase/admin";
+
+// Defensive cap on the cross-project roster read, same hardening pattern as
+// ENCOUNTER_SCAN_LIMIT/HEAD_TO_HEAD_SCAN_LIMIT/MAX_BACKFILL_ACCOUNTS
+// elsewhere in this pipeline. Not exploitable today (Rerolled's lifetime
+// signup cap bounds bungie_accounts to 150 rows), but keeps this query from
+// growing unbounded if that cap is ever raised.
+const SITE_ROSTER_SCAN_LIMIT = 1000;
 
 type SourceAccount = {
   user_id: string;
@@ -25,19 +32,18 @@ export async function syncSiteCrucibleRoster(): Promise<number> {
   const source = createClient(sourceUrl, sourceServiceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data: sourceAccounts, error: accountError } = await source
-    .from("bungie_accounts")
-    .select("user_id,membership_id,membership_type");
+  const { data: sourceAccounts, error: accountError } = await withSupabaseTimeout(
+    source.from("bungie_accounts").select("user_id,membership_id,membership_type").limit(SITE_ROSTER_SCAN_LIMIT)
+  );
   if (accountError) throw new Error(`Site Bungie roster read failed: ${accountError.message}`);
 
   const accounts = (sourceAccounts ?? []) as SourceAccount[];
   if (accounts.length === 0) return 0;
 
   const userIds = [...new Set(accounts.map((account) => account.user_id))];
-  const { data: sourceUsers, error: userError } = await source
-    .from("users")
-    .select("id,display_name")
-    .in("id", userIds);
+  const { data: sourceUsers, error: userError } = await withSupabaseTimeout(
+    source.from("users").select("id,display_name").in("id", userIds).limit(SITE_ROSTER_SCAN_LIMIT)
+  );
   if (userError) throw new Error(`Site user roster read failed: ${userError.message}`);
 
   const users = (sourceUsers ?? []) as SourceUser[];
