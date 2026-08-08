@@ -197,4 +197,30 @@ describe("signup capacity check for returning users (#7)", () => {
     expect(res.headers.get("location")).toBe("https://test.app/auth/error?error=encrypt_failed");
     expect(mockReleaseSignupSlot).toHaveBeenCalledWith("user-1");
   });
+
+  // Found during the 2026-08-08 scheduled production health audit. A user
+  // already registered on Rerolled's shared ledger, whose Rival-local
+  // bungie_accounts row hasn't been created yet (isReturningUser false),
+  // hits reserveSignupSlot and gets back already_registered:true - no new
+  // slot was reserved. If provisioning then fails, releasing "the slot"
+  // must be a no-op, not a delete of that user's real ledger row.
+  it("does not release the ledger slot when reserveSignupSlot reports already_registered for a failed provision", async () => {
+    setup(false);
+    jest.spyOn(console, "error").mockImplementation(() => {});
+    mockReserveSignupSlot.mockResolvedValue({
+      allowed: true,
+      already_registered: true,
+      user_count: 150,
+      max_users: 150,
+      status: "already_registered",
+    });
+    encryptToken.mockRejectedValue(new Error("encryption backend unavailable"));
+
+    const res = await GET(
+      new NextRequest("https://test.app/api/auth/bungie/callback?code=abc&state=valid-state"),
+    );
+
+    expect(res.headers.get("location")).toBe("https://test.app/auth/error?error=encrypt_failed");
+    expect(mockReleaseSignupSlot).not.toHaveBeenCalled();
+  });
 });

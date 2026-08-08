@@ -244,7 +244,11 @@ export async function GET(req: NextRequest) {
     try {
       const capacity = await reserveSignupSlot(userId);
       if (!capacity.allowed) return errRedirect("signup_cap_reached");
-      reservedNewSlot = true;
+      // already_registered means this user already held a slot on Rerolled's
+      // shared ledger (e.g. the hourly site-roster mirror hadn't caught up
+      // with isReturningUser yet) - no new row was reserved, so this request
+      // must never release one on failure below.
+      reservedNewSlot = !capacity.already_registered;
     } catch (e) {
       console.error("[bungie/callback] signup capacity verification failed", {
         site: "rival",
