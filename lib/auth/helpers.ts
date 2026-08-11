@@ -164,7 +164,18 @@ async function refreshBungieToken(userId: string, refreshTokenEnc: string): Prom
       const winnerToken = await recoverFromLostRefreshRace(userId, refreshTokenEnc);
       if (winnerToken) return winnerToken;
     }
-    throw new Error(`Bungie token refresh failed (${res.status}): ${body.slice(0, 100)}. Please sign out and sign in again`);
+    // Only a genuine rejection of the refresh token itself (dead/rotated
+    // grant) is a deterministic auth failure that only a fresh sign-in can
+    // fix - isBungieAuthErrorMessage (lib/auth/bungieErrors.ts) matches this
+    // exact wording to park the account. A transient status (rate limit,
+    // Bungie outage) must NOT match that wording, or a single 429/5xx hit
+    // during a scheduled refresh permanently stalls the account's sync with
+    // no retry and no user-visible signal, even though the stored refresh
+    // token itself is still perfectly valid.
+    if (res.status === 400 || res.status === 401 || res.status === 403) {
+      throw new Error(`Bungie token refresh failed (${res.status}): ${body.slice(0, 100)}. Please sign out and sign in again`);
+    }
+    throw new Error(`Bungie token refresh temporarily unavailable (${res.status}): ${body.slice(0, 100)}`);
   }
 
   const tokens = await res.json();

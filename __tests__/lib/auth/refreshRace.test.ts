@@ -143,4 +143,27 @@ describe("getBungieToken refresh race protection", () => {
     await expect(getBungieToken("user-1", "500")).rejects.toThrow("cross-app");
     expect(global.fetch).not.toHaveBeenCalled();
   });
+
+  // Production audit finding: a transient Bungie 429/5xx hit during a
+  // refresh was thrown with the same "Bungie token refresh failed (" wording
+  // as a genuinely dead refresh token, so isBungieAuthErrorMessage
+  // (lib/auth/bungieErrors.ts) misclassified it as a deterministic auth
+  // failure. That permanently parked the account's Crucible sync
+  // (lib/crucible/sync.ts's failCrucibleSync) with zero retry budget spent,
+  // even though the stored refresh token itself was still perfectly valid.
+  it("does not use the terminal-auth-failure wording for a transient Bungie status", async () => {
+    dbState.reads = [accountRow()];
+    mockBungie(503, { error: "internal_server_error" });
+
+    await expect(getBungieToken("user-1", "500")).rejects.toThrow(
+      "Bungie token refresh temporarily unavailable (503)",
+    );
+  });
+
+  it("still uses the terminal-auth-failure wording for a definite refresh rejection (401/403)", async () => {
+    dbState.reads = [accountRow()];
+    mockBungie(401, { error: "unauthorized" });
+
+    await expect(getBungieToken("user-1", "500")).rejects.toThrow("Bungie token refresh failed (401)");
+  });
 });
