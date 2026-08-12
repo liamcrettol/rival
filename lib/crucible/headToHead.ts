@@ -1,4 +1,4 @@
-import { adminSupabase } from "@/lib/supabase/admin";
+import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { resolveActivity } from "@/lib/bungie/pgcr";
 import { crucibleModeName } from "./modes";
 import { classifyCrucibleMode } from "./modes";
@@ -148,7 +148,10 @@ export async function getHeadToHeadSummaries(input: {
 }): Promise<Record<string, HeadToHeadSummary>> {
   const ids = [...new Set(input.opponentMembershipIds)];
   if (ids.length === 0) return {};
-  const db = input.db ?? adminSupabase;
+  // Same room as matchHistory.ts's identity RPC and the rivalry-leaders route -
+  // this scan is bounded by HEAD_TO_HEAD_SCAN_LIMIT but for a large synced
+  // history still regularly outruns the app-wide 1.2s default budget.
+  const db = input.db ?? createAdminSupabaseClient(5_000);
   const batches = Array.from({ length: Math.ceil(ids.length / 50) }, (_, index) => ids.slice(index * 50, (index + 1) * 50));
   const results = await Promise.all(batches.map(async (batch) => {
     let query = db
@@ -199,7 +202,7 @@ export async function getHeadToHeadMatches(input: {
   limit?: number;
   db?: Db;
 }): Promise<{ matches: HeadToHeadMeeting[]; nextCursor: string | null }> {
-  const db = input.db ?? adminSupabase;
+  const db = input.db ?? createAdminSupabaseClient(5_000);
   const limit = Math.min(Math.max(input.limit ?? 20, 1), 50);
   let query = db.from("crucible_encounters")
     .select("opponent_membership_id, opponent_membership_type, opponent_display_name, instance_id, mode_bucket, viewer_won, played_at")

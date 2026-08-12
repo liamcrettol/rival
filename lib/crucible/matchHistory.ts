@@ -1,4 +1,4 @@
-import { adminSupabase, createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { resolveActivity } from "@/lib/bungie/pgcr";
 import type { SeasonMatch, SeasonMatchPlayer } from "@/types/platform";
 
@@ -125,7 +125,10 @@ export async function getCrucibleMatchHistory(
   userId: string,
   options: { limit?: number; instanceIds?: string[]; db?: Db; resolveActivityDef?: typeof resolveActivity } = {},
 ): Promise<{ matches: SeasonMatch[]; syncStatus: SeasonStatsSyncStatus }> {
-  const db = options.db ?? adminSupabase;
+  // Same room as the identity RPC below - crucible_matches/crucible_match_players
+  // scans for an account with a large synced history can outrun the app-wide
+  // 1.2s default budget, same failure mode that RPC hit first.
+  const db = options.db ?? createAdminSupabaseClient(5_000);
   const resolveDef = options.resolveActivityDef ?? resolveActivity;
   const limit = Math.min(Math.max(options.limit ?? 8, 1), 50);
   const [{ data: account, error: accountError }, { data: syncState }] = await Promise.all([
