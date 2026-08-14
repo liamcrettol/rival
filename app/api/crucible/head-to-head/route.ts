@@ -3,6 +3,9 @@ import { z } from "zod";
 import { requireSession } from "@/lib/auth/helpers";
 import { getHeadToHeadSummaries } from "@/lib/crucible/headToHead";
 
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
 const querySchema = z.object({
   opponents: z.string().min(1),
   mode: z.enum(["all", "trials", "competitive", "control", "iron_banner", "other"]).default("all"),
