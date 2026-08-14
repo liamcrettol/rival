@@ -171,8 +171,8 @@ export async function getHeadToHeadSummaries(input: {
   const matchMetadata = new Map<string, MatchMetadata>();
   if (instanceIds.length > 0) {
     const matchBatches = Array.from({ length: Math.ceil(instanceIds.length / 100) }, (_, index) => instanceIds.slice(index * 100, (index + 1) * 100));
-    for (const batch of matchBatches) {
-      const batchMetadata = await loadMatchMetadata(db, batch);
+    const batchResults = await Promise.all(matchBatches.map((batch) => loadMatchMetadata(db, batch)));
+    for (const batchMetadata of batchResults) {
       for (const [instanceId, metadata] of batchMetadata) matchMetadata.set(instanceId, metadata);
     }
   }
