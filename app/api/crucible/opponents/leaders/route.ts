@@ -68,6 +68,7 @@ export async function GET() {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to load rivalry leaders";
+    if (message !== "Unauthorized") console.error("[crucible/rivalry-leaders] request failed:", message);
     return NextResponse.json({ error: message }, { status: message === "Unauthorized" ? 401 : 500 });
   }
 }

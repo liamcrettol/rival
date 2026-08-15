@@ -11,6 +11,7 @@ export async function POST() {
     return NextResponse.json({ ok: true, state });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to queue Crucible history";
+    if (message !== "Unauthorized") console.error("[crucible/sync] request failed:", message);
     return NextResponse.json({ ok: false, error: message }, { status: message === "Unauthorized" ? 401 : 500 });
   }
 }

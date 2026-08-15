@@ -16,6 +16,7 @@ export async function GET() {
     return NextResponse.json({ status: state?.status ?? "idle", matchCount: count ?? 0 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to read Crucible sync status";
+    if (message !== "Unauthorized") console.error("[crucible/sync-status] request failed:", message);
     return NextResponse.json({ ok: false, error: message }, { status: message === "Unauthorized" ? 401 : 500 });
   }
 }

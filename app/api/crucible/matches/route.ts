@@ -11,6 +11,7 @@ export async function GET() {
     return NextResponse.json(history);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to load Crucible matches";
+    if (message !== "Unauthorized") console.error("[crucible/matches] request failed:", message);
     return NextResponse.json({ error: message }, { status: message === "Unauthorized" ? 401 : 500 });
   }
 }

@@ -16,6 +16,7 @@ export async function GET() {
     return NextResponse.json({ performances, degraded });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to load match hall of fame";
+    if (message !== "Unauthorized") console.error("[crucible/match-hall-of-fame] request failed:", message);
     return NextResponse.json({ error: message }, { status: message === "Unauthorized" ? 401 : 500 });
   }
 }

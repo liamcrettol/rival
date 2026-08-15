@@ -21,6 +21,7 @@ export async function POST() {
     return NextResponse.json({ ok: true, imported });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to refresh Crucible history";
+    if (message !== "Unauthorized") console.error("[crucible/refresh] request failed:", message);
     return NextResponse.json({ ok: false, error: message }, { status: message === "Unauthorized" ? 401 : 500 });
   }
 }
