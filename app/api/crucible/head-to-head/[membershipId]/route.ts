@@ -28,6 +28,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ members
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Invalid query" }, { status: 400 });
     const message = error instanceof Error ? error.message : "Unable to load head-to-head detail";
+    if (message !== "Unauthorized") console.error("[crucible/head-to-head/detail] request failed:", message);
     return NextResponse.json({ error: message }, { status: message === "Unauthorized" ? 401 : 500 });
   }
 }
