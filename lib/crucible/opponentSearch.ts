@@ -1,4 +1,4 @@
-import { adminSupabase, createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getHeadToHeadSummaries } from "./headToHead";
 import { isPlaceholderPlayerName, loadCanonicalPlayerIdentities } from "./playerIdentity";
 import type { OpponentSearchResult } from "./types";
@@ -147,7 +147,12 @@ export async function searchOpponents(input: {
   query: string;
   db?: Db;
 }): Promise<OpponentSearchResult[]> {
-  const db = input.db ?? adminSupabase;
+  // Same room as headToHead.ts/matchHistory.ts: this hits the same
+  // viewer_user_id-filtered crucible_encounters scan that regularly outruns
+  // the app-wide 1.2s default budget for a large synced history, and (below)
+  // feeds straight into getHeadToHeadSummaries, whose own 5s default would
+  // otherwise be silently overridden by passing this shorter-timeout client.
+  const db = input.db ?? createAdminSupabaseClient(5_000);
   const query = input.query.trim();
   const [local, bungie] = await Promise.all([
     searchLocalOpponents(input.viewerUserId, query, db),
