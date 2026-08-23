@@ -86,7 +86,7 @@ export async function releaseSignupSlot(userId: string): Promise<void> {
   }
 
   try {
-    await fetch(`${baseUrl.replace(/\/$/, "")}/api/internal/rival/signup-capacity`, {
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/api/internal/rival/signup-capacity`, {
       method: "DELETE",
       headers: {
         Authorization: `Bearer ${secret}`,
@@ -96,6 +96,16 @@ export async function releaseSignupSlot(userId: string): Promise<void> {
       cache: "no-store",
       signal: AbortSignal.timeout(1_500),
     });
+    if (!response.ok) {
+      // A non-2xx here (e.g. 401 from a secret rotated out of sync, or a 5xx)
+      // means the slot on Rerolled's ledger was never actually freed, even
+      // though this call itself didn't throw. Log it so an orphan created by
+      // an HTTP-layer failure during compensation leaves a trail.
+      console.error("[signupCapacity] release request was not accepted", {
+        userId,
+        status: response.status,
+      });
+    }
   } catch (error) {
     console.error("[signupCapacity] failed to release an orphaned slot", {
       userId,
