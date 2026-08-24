@@ -120,4 +120,17 @@ describe("releaseSignupSlot", () => {
     expect(global.fetch).not.toHaveBeenCalled();
     errSpy.mockRestore();
   });
+
+  it("logs a non-2xx release response instead of silently treating it as released", async () => {
+    const errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    (global.fetch as jest.Mock).mockResolvedValue(response(401, { status: "temporary_verification_failure", error: { code: "unauthorized" } }));
+
+    await releaseSignupSlot("orphaned-user");
+
+    expect(errSpy).toHaveBeenCalledWith(
+      "[signupCapacity] release request was not accepted",
+      expect.objectContaining({ userId: "orphaned-user", status: 401 }),
+    );
+    errSpy.mockRestore();
+  });
 });
