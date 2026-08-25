@@ -215,6 +215,10 @@ export async function getHeadToHeadMatches(input: {
   if (input.cursor) {
     const [playedAt, instanceId] = Buffer.from(input.cursor, "base64url").toString("utf8").split("|");
     if (!playedAt || !instanceId) throw new Error("Invalid head-to-head cursor");
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(playedAt)) {
+      throw new Error("Invalid head-to-head cursor");
+    }
+    if (!/^\d{1,30}$/.test(instanceId)) throw new Error("Invalid head-to-head cursor");
     query = query.or(`played_at.lt.${playedAt},and(played_at.eq.${playedAt},instance_id.lt.${instanceId})`);
   }
   const { data, error } = await query;
