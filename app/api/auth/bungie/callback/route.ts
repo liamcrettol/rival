@@ -298,6 +298,13 @@ export async function GET(req: NextRequest) {
       "[bungie/callback] continuing with session-only auth after users upsert outage:",
       formatSupabaseError(userErr)
     );
+    // The users upsert failing transiently means the bungie_accounts upsert
+    // below is skipped too (skipDependentDbWrites) - no account row will
+    // exist for this request either way, so the reserved slot must be given
+    // back now. Otherwise it leaks silently: nothing later in this request
+    // hits the accountErr release branch to catch it, since accountErr stays
+    // null on the skipped path.
+    if (reservedNewSlot) await releaseSignupSlot(userId);
   }
 
   // Persist bungie account

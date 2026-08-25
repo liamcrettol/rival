@@ -260,4 +260,59 @@ describe("signup capacity check for returning users (#7)", () => {
     expect(res.headers.get("location")).toBe("https://test.app/auth/error?error=account_upsert_failed");
     expect(mockReleaseSignupSlot).toHaveBeenCalledWith("user-1");
   });
+
+  // Found during the 2026-08-25 production health audit: a *transient*
+  // users-upsert outage takes the "continuing with session-only auth"
+  // branch, which skips the bungie_accounts upsert entirely
+  // (skipDependentDbWrites) - so no account row is ever created for this
+  // request. Unlike every sibling failure branch, this path used to fall
+  // straight through to minting a session cookie without releasing the
+  // slot it had reserved, silently leaking one of the 150 lifetime slots
+  // on every transient blip.
+  it("releases the reserved slot when the users upsert fails transiently, even though login still succeeds", async () => {
+    setup(false);
+    const bungieAccountsUpsert = jest.fn().mockReturnThis();
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "users") {
+        return {
+          upsert: jest.fn().mockReturnThis(),
+          abortSignal: jest.fn().mockReturnValue({
+            then: (resolve: (v: { error: { message: string } }) => void) =>
+              resolve({ error: { message: "fetch failed: connection timed out" } }),
+          }),
+        };
+      }
+      if (table === "bungie_accounts") {
+        return {
+          select: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          upsert: bungieAccountsUpsert,
+          abortSignal: jest.fn().mockReturnValue({
+            maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+        };
+      }
+      return tableQuery(false);
+    });
+    jest.spyOn(console, "error").mockImplementation(() => {});
+    mockReserveSignupSlot.mockResolvedValue({
+      allowed: true,
+      already_registered: false,
+      user_count: 10,
+      max_users: 150,
+      status: "available",
+    });
+
+    const res = await GET(
+      new NextRequest("https://test.app/api/auth/bungie/callback?code=abc&state=valid-state"),
+    );
+
+    // Degraded-mode login still succeeds (that's the intended fallback)...
+    expect(res.headers.get("location")).toBe("https://test.app/dashboard");
+    // ...the bungie_accounts write is skipped entirely for this request...
+    expect(bungieAccountsUpsert).not.toHaveBeenCalled();
+    // ...but the reserved slot must not leak just because no error ever
+    // reached the accountErr release branch.
+    expect(mockReleaseSignupSlot).toHaveBeenCalledWith("user-1");
+  });
 });
