@@ -38,6 +38,7 @@ async function getSiteBungieToken(userId: string, membershipId?: string): Promis
     },
     body: JSON.stringify({ userId, membershipId }),
     cache: "no-store",
+    signal: AbortSignal.timeout(1_500),
   });
   const body = await response.json().catch(() => null) as { accessToken?: string; error?: string } | null;
   if (!response.ok || !body?.accessToken) {
