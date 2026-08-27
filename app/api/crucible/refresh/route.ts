@@ -16,7 +16,10 @@ export async function POST() {
     // predates the backfill feature (or whose sign-in enqueue failed) would
     // otherwise never get a sync-state row and never backfill. Enrolling here is
     // idempotent and freshness-gated, so a routine page view is one cheap read.
-    await queueCrucibleSync(session.userId).catch(() => {});
+    await queueCrucibleSync(session.userId).catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[crucible/refresh] backfill enrollment failed:", message);
+    });
     const { imported } = await syncRecentCrucibleHistory(session.userId);
     return NextResponse.json({ ok: true, imported });
   } catch (error) {
