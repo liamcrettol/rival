@@ -315,4 +315,49 @@ describe("signup capacity check for returning users (#7)", () => {
     // reached the accountErr release branch.
     expect(mockReleaseSignupSlot).toHaveBeenCalledWith("user-1");
   });
+
+  // Found during the 2026-08-26 production health audit: the sibling
+  // bungie_accounts-upsert transient branch had the same leak as the
+  // users-upsert one above (#22 only patched that one) - it logged and fell
+  // through to a session-only login without ever releasing the slot, so no
+  // bungie_accounts row exists for this user and none of their previously
+  // reserved 150-cap slot is ever given back.
+  it("releases the reserved slot when the bungie_accounts upsert fails transiently, even though login still succeeds", async () => {
+    setup(false);
+    const bungieAccountsUpsert = jest.fn().mockReturnThis();
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "bungie_accounts") {
+        return {
+          select: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          upsert: bungieAccountsUpsert,
+          abortSignal: jest.fn().mockReturnValue({
+            maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+            then: (resolve: (v: { error: { message: string } }) => void) =>
+              resolve({ error: { message: "fetch failed: connection timed out" } }),
+          }),
+        };
+      }
+      return tableQuery(false);
+    });
+    jest.spyOn(console, "error").mockImplementation(() => {});
+    mockReserveSignupSlot.mockResolvedValue({
+      allowed: true,
+      already_registered: false,
+      user_count: 10,
+      max_users: 150,
+      status: "available",
+    });
+
+    const res = await GET(
+      new NextRequest("https://test.app/api/auth/bungie/callback?code=abc&state=valid-state"),
+    );
+
+    // Degraded-mode login still succeeds (that's the intended fallback)...
+    expect(res.headers.get("location")).toBe("https://test.app/dashboard");
+    expect(bungieAccountsUpsert).toHaveBeenCalled();
+    // ...but the reserved slot must not leak just because the transient
+    // branch never used to reach a release call.
+    expect(mockReleaseSignupSlot).toHaveBeenCalledWith("user-1");
+  });
 });
