@@ -99,4 +99,26 @@ describe("reconcilePendingPgcrs", () => {
     expect(result.failed).toBe(1);
     expect(parkConflict).toHaveBeenCalledWith("10", "different checksum");
   });
+
+  it("isolates a parkConflict failure so the rest of the batch still archives", async () => {
+    const rows = ["1", "2", "3"].map((instance_id) => ({ instance_id }));
+    const archiveOne = jest.fn(async (instanceId: string) => instanceId === "2"
+      ? { archived: false, cleared: false, archiveError: { kind: "conflict", message: "different checksum" } }
+      : { archived: true, cleared: true });
+    const parkConflict = jest.fn(async () => {
+      throw new Error("Supabase write timed out");
+    });
+    const consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const result = await reconcilePendingPgcrs(
+      { limit: 10, concurrency: 1 },
+      { db: makeDb(rows, 0), archiveOne, parkConflict },
+    );
+
+    consoleError.mockRestore();
+
+    expect(archiveOne).toHaveBeenCalledTimes(3);
+    expect(parkConflict).toHaveBeenCalledWith("2", "different checksum");
+    expect(result).toMatchObject({ attempted: 3, archived: 2, failed: 1, deferred: 0 });
+  });
 });

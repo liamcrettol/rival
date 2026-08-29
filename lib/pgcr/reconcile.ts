@@ -120,7 +120,19 @@ export async function reconcilePendingPgcrs(
         message: outcome.archiveError?.message ?? "The source payload changed while it was being archived.",
       });
       if (outcome.archiveError?.kind === "conflict") {
-        await parkConflict(row.instance_id, outcome.archiveError.message);
+        try {
+          await parkConflict(row.instance_id, outcome.archiveError.message);
+        } catch (parkError) {
+          // Isolate this row's park failure the same way archiveOne's own
+          // failures are isolated - a transient Supabase write error here
+          // must not abort the rest of the batch. The row stays unparked and
+          // gets retried (or re-parked) on the next reconcile run.
+          console.error(
+            "[pgcr/reconcile] parkConflict failed:",
+            row.instance_id,
+            parkError instanceof Error ? parkError.message : parkError,
+          );
+        }
       }
     }
   }
