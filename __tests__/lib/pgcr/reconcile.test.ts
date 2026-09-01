@@ -99,4 +99,26 @@ describe("reconcilePendingPgcrs", () => {
     expect(result.failed).toBe(1);
     expect(parkConflict).toHaveBeenCalledWith("10", "different checksum");
   });
+
+  it("keeps processing the rest of a chunk when parkConflict itself throws", async () => {
+    const rows = ["10", "11"].map((instance_id) => ({ instance_id }));
+    const parkConflict = jest.fn(async () => {
+      throw new Error("PGCR conflict park failed: timeout");
+    });
+    const archiveOne = jest.fn(async () => ({
+      archived: false,
+      cleared: false,
+      archiveError: { kind: "conflict", message: "different checksum" },
+    }));
+
+    const result = await reconcilePendingPgcrs(
+      { concurrency: 2 },
+      { db: makeDb(rows, 0), archiveOne, parkConflict },
+    );
+
+    expect(archiveOne).toHaveBeenCalledTimes(2);
+    expect(parkConflict).toHaveBeenCalledTimes(2);
+    expect(result.failed).toBe(2);
+    expect(result.deferred).toBe(0);
+  });
 });
