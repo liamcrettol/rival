@@ -120,7 +120,14 @@ export async function reconcilePendingPgcrs(
         message: outcome.archiveError?.message ?? "The source payload changed while it was being archived.",
       });
       if (outcome.archiveError?.kind === "conflict") {
-        await parkConflict(row.instance_id, outcome.archiveError.message);
+        try {
+          await parkConflict(row.instance_id, outcome.archiveError.message);
+        } catch (err) {
+          console.error(
+            `[pgcr/reconcile] parkConflict failed for ${row.instance_id}:`,
+            err instanceof Error ? err.message : err
+          );
+        }
       }
     }
   }
