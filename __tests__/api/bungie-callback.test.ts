@@ -175,6 +175,61 @@ describe("signup capacity check for returning users (#7)", () => {
     expect(res.headers.get("location")).toBe("https://test.app/auth/error?error=signup_cap_unavailable");
   });
 
+  // #32 - a returning user must not be misrouted into the fail-closed
+  // cross-service capacity check just because their own local
+  // bungie_accounts lookup blipped once. Retrying once keeps a single
+  // transient error from requiring a coincidental second failure (the
+  // capacity check itself blipping too) to actually block their login.
+  it("retries the local returning-user lookup once before falling back to the capacity check (#32)", async () => {
+    setup(true);
+    let bungieAccountsCalls = 0;
+    mockFrom.mockImplementation((table: string) => {
+      if (table !== "bungie_accounts") return tableQuery(true);
+      bungieAccountsCalls += 1;
+      if (bungieAccountsCalls === 1) {
+        return {
+          select: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          abortSignal: jest.fn().mockReturnThis(),
+          maybeSingle: jest.fn().mockRejectedValue(new Error("supabase blip")),
+        };
+      }
+      return tableQuery(true);
+    });
+
+    const res = await GET(
+      new NextRequest("https://test.app/api/auth/bungie/callback?code=abc&state=valid-state"),
+    );
+
+    expect(res.headers.get("location")).toBe("https://test.app/dashboard");
+    expect(mockReserveSignupSlot).not.toHaveBeenCalled();
+    expect(bungieAccountsCalls).toBeGreaterThanOrEqual(2);
+  });
+
+  it("falls back to the capacity check when the local lookup fails on both attempts", async () => {
+    setup(true);
+    mockFrom.mockImplementation((table: string) => {
+      if (table !== "bungie_accounts") return tableQuery(true);
+      // Only the read (lookup) chain should fail on every attempt - the
+      // later bungie_accounts upsert on this same table must still succeed.
+      return { ...tableQuery(true), maybeSingle: jest.fn().mockRejectedValue(new Error("supabase blip")) };
+    });
+    mockReserveSignupSlot.mockResolvedValue({
+      allowed: true,
+      already_registered: true,
+      user_count: 10,
+      max_users: 150,
+      status: "already_registered",
+    });
+
+    const res = await GET(
+      new NextRequest("https://test.app/api/auth/bungie/callback?code=abc&state=valid-state"),
+    );
+
+    expect(res.headers.get("location")).toBe("https://test.app/dashboard");
+    expect(mockReserveSignupSlot).toHaveBeenCalledWith("user-1");
+  });
+
   // #368 follow-up (ported from Rerolled) - encryptToken() throwing left a
   // reserved slot orphaned forever, same failure shape as the
   // user_upsert_failed branch which already releases it.

@@ -225,18 +225,25 @@ export async function GET(req: NextRequest) {
   // outage/cold start would block login for Rival's whole existing user
   // base, not just new signups (#7). A failed or errored local lookup falls
   // through to the existing capacity check below, so no capacity-safety
-  // guarantee is weakened for new signups.
+  // guarantee is weakened for new signups - but a returning user would still
+  // wrongly hit that fail-closed path if the capacity check itself blips at
+  // the same moment (#32), so retry this local lookup once before giving up.
   let isReturningUser = false;
-  try {
-    const { data: existingAccount, error: lookupErr } = await adminSupabase
-      .from("bungie_accounts")
-      .select("user_id")
-      .eq("user_id", userId)
-      .abortSignal(AbortSignal.timeout(800))
-      .maybeSingle();
-    isReturningUser = !lookupErr && !!existingAccount;
-  } catch {
-    isReturningUser = false;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const { data: existingAccount, error: lookupErr } = await adminSupabase
+        .from("bungie_accounts")
+        .select("user_id")
+        .eq("user_id", userId)
+        .abortSignal(AbortSignal.timeout(800))
+        .maybeSingle();
+      if (!lookupErr) {
+        isReturningUser = !!existingAccount;
+        break;
+      }
+    } catch {
+      // fall through to retry, or give up after the second attempt
+    }
   }
 
   let reservedNewSlot = false;
