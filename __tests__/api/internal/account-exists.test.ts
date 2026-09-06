@@ -50,14 +50,27 @@ it("rejects a batch over the size limit", async () => {
 });
 
 it("returns which of the requested user ids have a real Rival account", async () => {
-  mockIn.mockResolvedValue({ data: [{ id: "user-1" }, { id: "user-3" }], error: null });
+  mockIn.mockResolvedValue({ data: [{ user_id: "user-1" }, { user_id: "user-3" }], error: null });
 
   const res = await POST(req({ userIds: ["user-1", "user-2", "user-3"] }));
   const body = await res.json();
 
   expect(res.status).toBe(200);
   expect(body.existingUserIds.sort()).toEqual(["user-1", "user-3"]);
-  expect(mockIn).toHaveBeenCalledWith("id", ["user-1", "user-2", "user-3"]);
+  expect(mockIn).toHaveBeenCalledWith("user_id", ["user-1", "user-2", "user-3"]);
+});
+
+it("does not count a user whose users row exists but bungie_accounts never completed", async () => {
+  // Guards against reintroducing the users-table check this route used to
+  // have: a users row with no bungie_accounts row is a half-created
+  // account (process killed between the two upserts) and must still read
+  // as "no account" so Rerolled's reconcile cron releases the slot.
+  mockIn.mockResolvedValue({ data: [], error: null });
+
+  const res = await POST(req({ userIds: ["half-created"] }));
+  const body = await res.json();
+
+  expect(body.existingUserIds).toEqual([]);
 });
 
 it("returns 503 instead of masking a query failure as no accounts existing", async () => {

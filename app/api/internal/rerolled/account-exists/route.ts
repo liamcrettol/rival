@@ -34,14 +34,19 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Check bungie_accounts, not users: the OAuth callback upserts users
+    // before bungie_accounts, so a process killed in between leaves a users
+    // row with no bungie_accounts row - a half-created account that
+    // Rerolled's reconcile-signup-slots cron should still treat as an
+    // orphaned slot, not a completed signup (mirrors #391 on Rerolled's side).
     const { data, error } = await withSupabaseTimeout(
-      adminSupabase.from("users").select("id").in("id", body.userIds),
+      adminSupabase.from("bungie_accounts").select("user_id").in("user_id", body.userIds),
       2_000
     );
     if (error) throw new Error(error.message);
 
     return NextResponse.json(
-      { existingUserIds: (data ?? []).map((row: { id: string }) => row.id) },
+      { existingUserIds: (data ?? []).map((row: { user_id: string }) => row.user_id) },
       { headers: { "Cache-Control": "no-store, private" } }
     );
   } catch (error) {
