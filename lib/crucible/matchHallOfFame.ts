@@ -86,16 +86,30 @@ export async function getMatchHallOfFame(
   const instanceIds = [...new Set((encounterRows ?? []).map((row: { instance_id: string }) => row.instance_id))];
   if (instanceIds.length === 0) return [];
 
-  const [{ data: matches, error: matchError }, { data: players, error: playerError }] = await Promise.all([
-    db.from("crucible_matches")
-      .select("instance_id, activity_mode, activity_modes, mode_bucket, activity_name, activity_image, period, team_data, is_private")
-      .in("instance_id", instanceIds),
-    db.from("crucible_match_players")
-      .select("instance_id, membership_id, membership_type, display_name, team_id, is_win, kills, deaths, assists")
-      .in("instance_id", instanceIds),
-  ]);
-  if (matchError) throw new Error(`Match hall of fame match lookup failed: ${matchError.message}`);
-  if (playerError) throw new Error(`Match hall of fame roster lookup failed: ${playerError.message}`);
+  // Batched like getHeadToHeadSummaries' loadMatchMetadata (headToHead.ts) -
+  // a single unbatched .in() against up to ENCOUNTER_SCAN_LIMIT ids risks
+  // oversized IN-lists and query timeouts for prolific accounts.
+  const idBatches = Array.from({ length: Math.ceil(instanceIds.length / 100) }, (_, index) =>
+    instanceIds.slice(index * 100, (index + 1) * 100)
+  );
+  const matches: MatchRow[] = [];
+  const players: PlayerRow[] = [];
+  await Promise.all(
+    idBatches.map(async (batch) => {
+      const [matchResult, playerResult] = await Promise.all([
+        db.from("crucible_matches")
+          .select("instance_id, activity_mode, activity_modes, mode_bucket, activity_name, activity_image, period, team_data, is_private")
+          .in("instance_id", batch),
+        db.from("crucible_match_players")
+          .select("instance_id, membership_id, membership_type, display_name, team_id, is_win, kills, deaths, assists")
+          .in("instance_id", batch),
+      ]);
+      if (matchResult.error) throw new Error(`Match hall of fame match lookup failed: ${matchResult.error.message}`);
+      if (playerResult.error) throw new Error(`Match hall of fame roster lookup failed: ${playerResult.error.message}`);
+      matches.push(...((matchResult.data ?? []) as MatchRow[]));
+      players.push(...((playerResult.data ?? []) as PlayerRow[]));
+    })
+  );
 
   const playersByMatch = new Map<string, PlayerRow[]>();
   for (const player of (players ?? []) as PlayerRow[]) {
