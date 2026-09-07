@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth/helpers";
 import { adminSupabase } from "@/lib/supabase/admin";
+import { toClientErrorMessage } from "@/lib/api/errors";
 
 // Cheap polling target for the dashboard while a backfill is in progress:
 // two indexed lookups, no Bungie call, so it's safe to hit every few seconds.
@@ -16,7 +17,8 @@ export async function GET() {
     return NextResponse.json({ status: state?.status ?? "idle", matchCount: count ?? 0 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to read Crucible sync status";
-    if (message !== "Unauthorized") console.error("[crucible/sync-status] request failed:", message);
-    return NextResponse.json({ ok: false, error: message }, { status: message === "Unauthorized" ? 401 : 500 });
+    const status = message === "Unauthorized" ? 401 : 500;
+    if (status === 500) console.error("[crucible/sync-status] request failed:", message);
+    return NextResponse.json({ ok: false, error: toClientErrorMessage(message, status) }, { status });
   }
 }

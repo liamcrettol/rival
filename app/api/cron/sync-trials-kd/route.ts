@@ -3,6 +3,7 @@ import { assertCronAuth } from "@/lib/auth/cron";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { listTrialsStats, needsTrialsStatsFetch, isTrialsStatsQuotaError } from "@/lib/crucible/trialsStatsStore";
 import { refreshOpponents, type OpponentRef } from "@/lib/crucible/trialsBackfill";
+import { UNEXPECTED_ERROR_MESSAGE } from "@/lib/api/errors";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -70,6 +71,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, candidates: candidates.length, due: due.length, ...result });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    console.error("[cron/sync-trials-kd] request failed:", message);
+    return NextResponse.json({ ok: false, error: UNEXPECTED_ERROR_MESSAGE }, { status: 500 });
   }
 }

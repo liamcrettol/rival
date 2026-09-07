@@ -4,6 +4,7 @@ import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import type { RivalryLeader } from "@/lib/crucible/types";
 import { syncRivalryFriendExclusions } from "@/lib/crucible/rivalryFriends";
 import { isPlaceholderPlayerName, loadCanonicalPlayerIdentities } from "@/lib/crucible/playerIdentity";
+import { toClientErrorMessage } from "@/lib/api/errors";
 
 interface LeaderRow {
   leader_type: "wins" | "losses";
@@ -68,7 +69,8 @@ export async function GET() {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to load rivalry leaders";
-    if (message !== "Unauthorized") console.error("[crucible/rivalry-leaders] request failed:", message);
-    return NextResponse.json({ error: message }, { status: message === "Unauthorized" ? 401 : 500 });
+    const status = message === "Unauthorized" ? 401 : 500;
+    if (status === 500) console.error("[crucible/rivalry-leaders] request failed:", message);
+    return NextResponse.json({ error: toClientErrorMessage(message, status) }, { status });
   }
 }

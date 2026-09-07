@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth/helpers";
 import { searchOpponents } from "@/lib/crucible/opponentSearch";
+import { toClientErrorMessage } from "@/lib/api/errors";
 
 const querySchema = z.object({ q: z.string().trim().min(2).max(64) });
 const RATE_WINDOW_MS = 60_000;
@@ -35,7 +36,8 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Enter at least two characters" }, { status: 400 });
     const message = error instanceof Error ? error.message : "Unable to search players";
-    if (message !== "Unauthorized") console.error("[crucible/opponents/search] request failed:", message);
-    return NextResponse.json({ error: message }, { status: message === "Unauthorized" ? 401 : 500 });
+    const status = message === "Unauthorized" ? 401 : 500;
+    if (status === 500) console.error("[crucible/opponents/search] request failed:", message);
+    return NextResponse.json({ error: toClientErrorMessage(message, status) }, { status });
   }
 }

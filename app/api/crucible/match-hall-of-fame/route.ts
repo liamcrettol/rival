@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth/helpers";
 import { getMatchHallOfFame } from "@/lib/crucible/matchHallOfFame";
+import { toClientErrorMessage } from "@/lib/api/errors";
 
 // Keep a generous ceiling for the history scan. Trials stats are populated by
 // the background sync; this request only reads the bounded cached candidate set
@@ -16,7 +17,8 @@ export async function GET() {
     return NextResponse.json({ performances, degraded });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to load match hall of fame";
-    if (message !== "Unauthorized") console.error("[crucible/match-hall-of-fame] request failed:", message);
-    return NextResponse.json({ error: message }, { status: message === "Unauthorized" ? 401 : 500 });
+    const status = message === "Unauthorized" ? 401 : 500;
+    if (status === 500) console.error("[crucible/match-hall-of-fame] request failed:", message);
+    return NextResponse.json({ error: toClientErrorMessage(message, status) }, { status });
   }
 }

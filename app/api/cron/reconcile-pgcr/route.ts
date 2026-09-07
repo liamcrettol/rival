@@ -25,7 +25,6 @@ export async function GET(req: NextRequest) {
       ok: false,
       state: "error",
       message: "PGCR archive reconciliation could not inspect or process the outbox.",
-      error: message,
     }, { status: 500 });
   }
 }

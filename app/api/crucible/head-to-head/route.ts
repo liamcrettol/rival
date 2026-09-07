@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth/helpers";
 import { getHeadToHeadSummaries } from "@/lib/crucible/headToHead";
+import { toClientErrorMessage } from "@/lib/api/errors";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -28,8 +29,9 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Invalid query" }, { status: 400 });
     const message = error instanceof Error ? error.message : "Unable to load head-to-head records";
-    if (message !== "Unauthorized") console.error("[crucible/head-to-head] request failed:", message);
-    return NextResponse.json({ error: message }, { status: message === "Unauthorized" ? 401 : 500 });
+    const status = message === "Unauthorized" ? 401 : 500;
+    if (status === 500) console.error("[crucible/head-to-head] request failed:", message);
+    return NextResponse.json({ error: toClientErrorMessage(message, status) }, { status });
   }
 }
 

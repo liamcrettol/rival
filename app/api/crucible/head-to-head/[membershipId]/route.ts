@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSession } from "@/lib/auth/helpers";
 import { getHeadToHeadMatches, getHeadToHeadSummary } from "@/lib/crucible/headToHead";
 import { getCrucibleMatchHistory } from "@/lib/crucible/matchHistory";
+import { toClientErrorMessage } from "@/lib/api/errors";
 
 const querySchema = z.object({
   mode: z.enum(["all", "trials", "competitive", "control", "iron_banner", "other"]).default("all"),
@@ -28,7 +29,8 @@ export async function GET(req: NextRequest, context: { params: Promise<{ members
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Invalid query" }, { status: 400 });
     const message = error instanceof Error ? error.message : "Unable to load head-to-head detail";
-    if (message !== "Unauthorized") console.error("[crucible/head-to-head/detail] request failed:", message);
-    return NextResponse.json({ error: message }, { status: message === "Unauthorized" ? 401 : 500 });
+    const status = message === "Unauthorized" ? 401 : 500;
+    if (status === 500) console.error("[crucible/head-to-head/detail] request failed:", message);
+    return NextResponse.json({ error: toClientErrorMessage(message, status) }, { status });
   }
 }

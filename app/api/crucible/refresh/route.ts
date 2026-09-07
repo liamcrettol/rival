@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth/helpers";
 import { queueCrucibleSync } from "@/lib/crucible/queueSync";
 import { syncRecentCrucibleHistory } from "@/lib/crucible/sync";
+import { toClientErrorMessage } from "@/lib/api/errors";
 
 // On-view sync: the dashboard fires this on load so the viewer's newest Crucible
 // matches import immediately, instead of waiting on the backfill cron. Bounded to
@@ -24,7 +25,8 @@ export async function POST() {
     return NextResponse.json({ ok: true, imported });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to refresh Crucible history";
-    if (message !== "Unauthorized") console.error("[crucible/refresh] request failed:", message);
-    return NextResponse.json({ ok: false, error: message }, { status: message === "Unauthorized" ? 401 : 500 });
+    const status = message === "Unauthorized" ? 401 : 500;
+    if (status === 500) console.error("[crucible/refresh] request failed:", message);
+    return NextResponse.json({ ok: false, error: toClientErrorMessage(message, status) }, { status });
   }
 }
