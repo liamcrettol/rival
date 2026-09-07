@@ -165,6 +165,75 @@ describe("signup capacity check for returning users (#7)", () => {
     expect(mockReserveSignupSlot).toHaveBeenCalledWith("user-1");
   });
 
+  // #32 — the local bungie_accounts existence check collapsed any error to
+  // "treat as new", so a local DB blip at exactly login time could route a
+  // genuinely returning user into the cross-service capacity check, which
+  // can itself fail closed and block a real existing user's login.
+  it("retries the local bungie_accounts lookup once before treating an errored returning user as new (#32)", async () => {
+    setup(false);
+    let lookupCalls = 0;
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "bungie_accounts") {
+        return {
+          select: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          upsert: jest.fn().mockReturnThis(),
+          abortSignal: jest.fn().mockReturnValue({
+            maybeSingle: jest.fn().mockImplementation(async () => {
+              lookupCalls += 1;
+              if (lookupCalls === 1) return { data: null, error: { message: "fetch failed: timed out" } };
+              return { data: { user_id: "user-1" }, error: null };
+            }),
+            then: (resolve: (v: { error: null }) => void) => resolve({ error: null }),
+          }),
+        };
+      }
+      return tableQuery(false);
+    });
+
+    const res = await GET(
+      new NextRequest("https://test.app/api/auth/bungie/callback?code=abc&state=valid-state"),
+    );
+
+    expect(res.headers.get("location")).toBe("https://test.app/dashboard");
+    expect(lookupCalls).toBe(2);
+    // The retry found the account, so this is a returning user - no
+    // cross-service capacity check should ever run.
+    expect(mockReserveSignupSlot).not.toHaveBeenCalled();
+  });
+
+  it("falls through to the new-user capacity check when the local lookup errors twice (#32)", async () => {
+    setup(false);
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "bungie_accounts") {
+        return {
+          select: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          upsert: jest.fn().mockReturnThis(),
+          abortSignal: jest.fn().mockReturnValue({
+            maybeSingle: jest.fn().mockResolvedValue({ data: null, error: { message: "fetch failed: timed out" } }),
+            then: (resolve: (v: { error: null }) => void) => resolve({ error: null }),
+          }),
+        };
+      }
+      return tableQuery(false);
+    });
+    mockReserveSignupSlot.mockResolvedValue({
+      allowed: true,
+      already_registered: false,
+      user_count: 10,
+      max_users: 150,
+      status: "available",
+    });
+
+    const res = await GET(
+      new NextRequest("https://test.app/api/auth/bungie/callback?code=abc&state=valid-state"),
+    );
+
+    expect(res.headers.get("location")).toBe("https://test.app/dashboard");
+    expect(mockReserveSignupSlot).toHaveBeenCalledWith("user-1");
+  });
+
   it("still blocks login on capacity-check failure for a genuinely new user", async () => {
     setup(false);
     jest.spyOn(console, "error").mockImplementation(() => {});

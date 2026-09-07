@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { adminSupabase, withSupabaseTimeout } from "@/lib/supabase/admin";
+import { UNEXPECTED_ERROR_MESSAGE } from "@/lib/api/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,6 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("[internal/rerolled/account-exists] lookup failed", { reason: message });
-    return NextResponse.json({ error: message }, { status: 503 });
+    return NextResponse.json({ error: UNEXPECTED_ERROR_MESSAGE }, { status: 503 });
   }
 }

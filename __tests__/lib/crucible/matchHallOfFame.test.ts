@@ -27,6 +27,8 @@ function makeDb(config: {
   onUpdate?: (patch: Row) => void;
   onUpsert?: (row: Row) => void;
   encounterQueryLimit?: number;
+  onMatchesIn?: (ids: string[]) => void;
+  onPlayersIn?: (ids: string[]) => void;
 }) {
   return {
     from(table: string) {
@@ -83,10 +85,24 @@ function makeDb(config: {
         };
       }
       if (table === "crucible_matches") {
-        return { select: () => ({ in: async () => ({ data: config.matches ?? [], error: null }) }) };
+        return {
+          select: () => ({
+            in: async (_col: string, ids: string[]) => {
+              config.onMatchesIn?.(ids);
+              return { data: (config.matches ?? []).filter((m) => ids.includes(m.instance_id as string)), error: null };
+            },
+          }),
+        };
       }
       if (table === "crucible_match_players") {
-        return { select: () => ({ in: async () => ({ data: config.players ?? [], error: null }) }) };
+        return {
+          select: () => ({
+            in: async (_col: string, ids: string[]) => {
+              config.onPlayersIn?.(ids);
+              return { data: (config.players ?? []).filter((p) => ids.includes(p.instance_id as string)), error: null };
+            },
+          }),
+        };
       }
       throw new Error(`unexpected table ${table}`);
     },
@@ -144,6 +160,36 @@ describe("getMatchHallOfFame — Appwrite quota degradation (#8)", () => {
     });
 
     await expect(getMatchHallOfFame("user-1", { db })).rejects.toThrow("boom");
+  });
+});
+
+describe("getMatchHallOfFame — batched match/player lookups (#34)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockListTrialsStats.mockResolvedValue([]);
+  });
+
+  it("chunks a large instance-id list into batches instead of one unbounded IN() query", async () => {
+    const instanceIds = Array.from({ length: 150 }, (_, i) => `m${i}`);
+    const matchesInCalls: string[][] = [];
+    const playersInCalls: string[][] = [];
+    const db = makeDb({
+      encounterCount: instanceIds.length,
+      encounterRows: instanceIds.map((instance_id) => ({ instance_id })),
+      cached: null,
+      onMatchesIn: (ids) => matchesInCalls.push(ids),
+      onPlayersIn: (ids) => playersInCalls.push(ids),
+    });
+
+    await getMatchHallOfFame("user-1", { db });
+
+    // Same 100-id batch size as getHeadToHeadSummaries' loadMatchMetadata.
+    expect(matchesInCalls.length).toBe(2);
+    expect(matchesInCalls[0].length).toBe(100);
+    expect(matchesInCalls[1].length).toBe(50);
+    expect(playersInCalls.length).toBe(2);
+    // Every instance id is covered exactly once, across both batches.
+    expect(new Set(matchesInCalls.flat()).size).toBe(150);
   });
 });
 

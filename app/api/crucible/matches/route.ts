@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth/helpers";
 import { getCrucibleMatchHistory } from "@/lib/crucible/matchHistory";
+import { toClientErrorMessage } from "@/lib/api/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,8 @@ export async function GET() {
     return NextResponse.json(history);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to load Crucible matches";
-    if (message !== "Unauthorized") console.error("[crucible/matches] request failed:", message);
-    return NextResponse.json({ error: message }, { status: message === "Unauthorized" ? 401 : 500 });
+    const status = message === "Unauthorized" ? 401 : 500;
+    if (status === 500) console.error("[crucible/matches] request failed:", message);
+    return NextResponse.json({ error: toClientErrorMessage(message, status) }, { status });
   }
 }
