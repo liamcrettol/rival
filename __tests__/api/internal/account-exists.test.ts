@@ -50,14 +50,29 @@ it("rejects a batch over the size limit", async () => {
 });
 
 it("returns which of the requested user ids have a real Rival account", async () => {
-  mockIn.mockResolvedValue({ data: [{ id: "user-1" }, { id: "user-3" }], error: null });
+  mockIn.mockResolvedValue({ data: [{ user_id: "user-1" }, { user_id: "user-3" }], error: null });
 
   const res = await POST(req({ userIds: ["user-1", "user-2", "user-3"] }));
   const body = await res.json();
 
   expect(res.status).toBe(200);
   expect(body.existingUserIds.sort()).toEqual(["user-1", "user-3"]);
-  expect(mockIn).toHaveBeenCalledWith("id", ["user-1", "user-2", "user-3"]);
+  expect(mockIn).toHaveBeenCalledWith("user_id", ["user-1", "user-2", "user-3"]);
+});
+
+it("does not count a users row with no completed bungie_accounts row as existing", async () => {
+  // Mirrors #391 on the Rerolled side: a process killed between the users
+  // upsert and the bungie_accounts upsert leaves an orphaned users row. This
+  // endpoint must check bungie_accounts (the table that represents a
+  // completed signup), not users, or reconcile-signup-slots will never
+  // reclaim that candidate's slot.
+  mockIn.mockResolvedValue({ data: [], error: null });
+
+  const res = await POST(req({ userIds: ["orphaned-user"] }));
+  const body = await res.json();
+
+  expect(res.status).toBe(200);
+  expect(body.existingUserIds).toEqual([]);
 });
 
 it("returns 503 instead of masking a query failure as no accounts existing", async () => {
