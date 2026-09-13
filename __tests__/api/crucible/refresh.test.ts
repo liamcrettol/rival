@@ -50,4 +50,30 @@ describe("POST /api/crucible/refresh", () => {
     expect(res.status).toBe(200);
     expect(console.error).not.toHaveBeenCalled();
   });
+
+  it("maps a dead/cross-app Bungie refresh-token error to 401, not a logged 500", async () => {
+    mockRequireSession.mockResolvedValue({ userId: "user-1" });
+    mockQueueCrucibleSync.mockResolvedValue(undefined);
+    mockSyncRecentCrucibleHistory.mockRejectedValue(
+      new Error("Bungie sign-in expired. Please sign out and sign in again."),
+    );
+
+    const res = await POST();
+    const body = await res.json();
+
+    expect(res.status).toBe(401);
+    expect(body.ok).toBe(false);
+    expect(console.error).not.toHaveBeenCalled();
+  });
+
+  it("still maps an unrecognized failure to a logged 500", async () => {
+    mockRequireSession.mockResolvedValue({ userId: "user-1" });
+    mockQueueCrucibleSync.mockResolvedValue(undefined);
+    mockSyncRecentCrucibleHistory.mockRejectedValue(new Error("boom"));
+
+    const res = await POST();
+
+    expect(res.status).toBe(500);
+    expect(console.error).toHaveBeenCalledWith("[crucible/refresh] request failed:", "boom");
+  });
 });

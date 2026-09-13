@@ -50,6 +50,7 @@ export default async function Dashboard() {
   const history = await getCrucibleMatchHistory(session.userId, { limit: 15 }).catch(() => ({
     matches: [],
     syncStatus: "idle" as const,
+    needsReauth: false,
   }));
 
   return (
@@ -73,7 +74,7 @@ export default async function Dashboard() {
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
         <CrucibleHistorySync />
         <OpponentSearch>
-          <MatchHistoryPanel matches={history.matches} syncStatus={history.syncStatus} />
+          <MatchHistoryPanel matches={history.matches} syncStatus={history.syncStatus} needsReauth={history.needsReauth} />
         </OpponentSearch>
       </main>
     </div>

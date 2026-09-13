@@ -10,6 +10,7 @@ import { classifyCrucibleMode, crucibleModeName } from "./modes";
 import { getHeadToHeadSummaries } from "./headToHead";
 import { isPlaceholderPlayerName, loadCanonicalPlayerIdentities } from "./playerIdentity";
 import type { CrucibleModeBucket, CrucibleSyncState } from "./types";
+import { isBungieAuthErrorMessage } from "@/lib/auth/bungieErrors";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = any;
@@ -124,7 +125,7 @@ async function repairStaleModeBuckets(
 export async function getCrucibleMatchHistory(
   userId: string,
   options: { limit?: number; instanceIds?: string[]; db?: Db; resolveActivityDef?: typeof resolveActivity } = {},
-): Promise<{ matches: SeasonMatch[]; syncStatus: SeasonStatsSyncStatus }> {
+): Promise<{ matches: SeasonMatch[]; syncStatus: SeasonStatsSyncStatus; needsReauth: boolean }> {
   // Same room as the identity RPC below - crucible_matches/crucible_match_players
   // scans for an account with a large synced history can outrun the app-wide
   // 1.2s default budget, same failure mode that RPC hit first.
@@ -133,10 +134,19 @@ export async function getCrucibleMatchHistory(
   const limit = Math.min(Math.max(options.limit ?? 8, 1), 50);
   const [{ data: account, error: accountError }, { data: syncState }] = await Promise.all([
     db.from("bungie_accounts").select("membership_id").eq("user_id", userId).maybeSingle(),
-    db.from("crucible_sync_state").select("status").eq("user_id", userId).maybeSingle(),
+    db.from("crucible_sync_state").select("status, last_error").eq("user_id", userId).maybeSingle(),
   ]);
-  if (accountError || !account?.membership_id) return { matches: [], syncStatus: "idle" };
-  const syncStatus = ((syncState as Pick<CrucibleSyncState, "status"> | null)?.status ?? "idle") as SeasonStatsSyncStatus;
+  if (accountError || !account?.membership_id) return { matches: [], syncStatus: "idle", needsReauth: false };
+  const syncStateRow = syncState as Pick<CrucibleSyncState, "status" | "last_error"> | null;
+  const syncStatus = (syncStateRow?.status ?? "idle") as SeasonStatsSyncStatus;
+  // A "failed" sync can be parked for a dead/cross-app Bungie refresh token
+  // (lib/crucible/sync.ts's failCrucibleSync) or another terminal reason
+  // (e.g. DestinyPrivacyRestriction). Only the former is something the viewer
+  // can fix themselves, by signing in again - surface that distinctly instead
+  // of lumping it in with "no matches yet".
+  const needsReauth = syncStatus === "failed"
+    && typeof syncStateRow?.last_error === "string"
+    && isBungieAuthErrorMessage(syncStateRow.last_error);
 
   let instanceIds: string[];
   if (options.instanceIds) {
@@ -151,7 +161,7 @@ export async function getCrucibleMatchHistory(
     if (encounterError) throw new Error(`Crucible history lookup failed: ${encounterError.message}`);
     instanceIds = [...new Set<string>((encounterRows ?? []).map((row: { instance_id: string }) => row.instance_id))].slice(0, limit);
   }
-  if (instanceIds.length === 0) return { matches: [], syncStatus };
+  if (instanceIds.length === 0) return { matches: [], syncStatus, needsReauth };
 
   // activity_image (migration 050) is additive; if it hasn't been applied yet,
   // fall back to a select without it rather than failing the whole report.
@@ -284,7 +294,7 @@ export async function getCrucibleMatchHistory(
   }).filter((match): match is SeasonMatch => match !== null)
     .sort((a, b) => new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime());
 
-  return { matches, syncStatus };
+  return { matches, syncStatus, needsReauth };
 }
 
 export type SeasonStatsSyncStatus = "idle" | "queued" | "syncing" | "complete" | "failed";

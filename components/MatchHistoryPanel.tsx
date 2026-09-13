@@ -212,9 +212,11 @@ export function MatchCard({ match }: { match: SeasonMatch }) {
 export default function MatchHistoryPanel({
   matches,
   syncStatus,
+  needsReauth = false,
 }: {
   matches: SeasonMatch[];
   syncStatus: SeasonStatsSyncStatus;
+  needsReauth?: boolean;
 }) {
   return (
     <section className="flex h-full min-h-0 flex-col">
@@ -232,6 +234,21 @@ export default function MatchHistoryPanel({
             {matches.length} recent
           </p>
         </div>
+
+        {needsReauth && (
+          <div className="mb-3 border border-bungie-blue/40 bg-bungie-blue/10 px-3 py-2 text-xs text-gray-300">
+            Your Bungie sign-in has expired, so your Crucible history stopped updating.{" "}
+            {/* OAuth re-auth entry point - must be a full navigation to the API route, not a client-side <Link>, same as SignOutButton. */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+            <a
+              href="/api/auth/bungie/login?reauth=true"
+              className="font-semibold text-bungie-blue transition hover:text-bungie-blue/80"
+            >
+              Sign in again
+            </a>{" "}
+            to resume syncing.
+          </div>
+        )}
 
         {matches.length === 0 ? (
           <div className="flex flex-1 items-center justify-center border border-dashed border-bungie-border/70 bg-bungie-dark/25 px-5 text-center">
