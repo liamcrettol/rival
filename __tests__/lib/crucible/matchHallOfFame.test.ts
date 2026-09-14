@@ -6,7 +6,9 @@
 // unbounded Supabase scan and re-hitting the exhausted Appwrite quota on
 // every request instead of actually caching anything.
 jest.mock("@/lib/crucible/trialsStatsStore", () => ({
-  isTrialsStatsQuotaError: (error: unknown) => (error as { quota?: boolean } | null)?.quota === true,
+  isTrialsStatsUnavailableError: (error: unknown) =>
+    (error as { quota?: boolean; appwrite?: boolean } | null)?.quota === true ||
+    (error as { quota?: boolean; appwrite?: boolean } | null)?.appwrite === true,
   listTrialsStats: jest.fn(),
 }));
 
@@ -110,6 +112,7 @@ function makeDb(config: {
 }
 
 const QUOTA_ERROR = { quota: true, message: "database reads limit" };
+const APPWRITE_OUTAGE_ERROR = { appwrite: true, message: "503 Service Unavailable" };
 
 describe("getMatchHallOfFame — Appwrite quota degradation (#8)", () => {
   beforeEach(() => {
@@ -151,7 +154,7 @@ describe("getMatchHallOfFame — Appwrite quota degradation (#8)", () => {
     expect(onUpdate).not.toHaveBeenCalled();
   });
 
-  it("re-throws a non-quota error instead of degrading", async () => {
+  it("re-throws an error unrelated to Appwrite instead of degrading", async () => {
     mockListTrialsStats.mockRejectedValue(new Error("boom"));
     const db = makeDb({
       encounterCount: 5,
@@ -160,6 +163,26 @@ describe("getMatchHallOfFame — Appwrite quota degradation (#8)", () => {
     });
 
     await expect(getMatchHallOfFame("user-1", { db })).rejects.toThrow("boom");
+  });
+
+  it("degrades to the cached result on a non-quota Appwrite outage too (#8 follow-up)", async () => {
+    // A 5xx/timeout/network blip from Appwrite itself, not a billing-quota
+    // rejection - the fix that used to only catch isTrialsStatsQuotaError
+    // let this propagate as an uncaught 500 even though a good cached result
+    // already existed.
+    mockListTrialsStats.mockRejectedValue(APPWRITE_OUTAGE_ERROR);
+    const onDegraded = jest.fn();
+    const cachedEntries = [{ instanceId: "old-match", rank: 1 }];
+    const db = makeDb({
+      encounterCount: 5,
+      encounterRows: [{ instance_id: "m1" }],
+      cached: { encounter_count: 3, entries: cachedEntries },
+    });
+
+    const result = await getMatchHallOfFame("user-1", { db, onDegraded });
+
+    expect(onDegraded).toHaveBeenCalled();
+    expect(result).toBe(cachedEntries);
   });
 });
 

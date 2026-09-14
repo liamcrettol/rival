@@ -1,5 +1,5 @@
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
-import { isTrialsStatsQuotaError, listTrialsStats, type TrialsStatsDoc } from "@/lib/crucible/trialsStatsStore";
+import { isTrialsStatsUnavailableError, listTrialsStats, type TrialsStatsDoc } from "@/lib/crucible/trialsStatsStore";
 import { crucibleGameReportUrl, crucibleModeName, trialsReportPlayerUrl } from "./modes";
 import type { MatchHallOfFameEntry } from "./types";
 
@@ -210,10 +210,16 @@ export async function getMatchHallOfFame(
   try {
     cachedStats = await listTrialsStats(prioritizedRefs.map((ref) => ref.membershipId));
   } catch (error) {
-    if (!isTrialsStatsQuotaError(error)) throw error;
-    console.warn("[match-hall-of-fame] Trials stats read quota exhausted; serving cached result", {
+    // Any Appwrite-side outage (quota exhaustion, a 5xx, a timeout) degrades
+    // to the cached result the same way - only a bug unrelated to Appwrite
+    // itself should still surface as a 500 (#8 follow-up: the original fix
+    // only covered quota exhaustion, so a plain Appwrite network/5xx blip
+    // still dropped an already-known-good cached result and 500'd instead).
+    if (!isTrialsStatsUnavailableError(error)) throw error;
+    console.warn("[match-hall-of-fame] Trials stats unavailable; serving cached result", {
       userId,
       candidateCount: prioritizedRefs.length,
+      reason: error instanceof Error ? error.message : "unknown error",
     });
     options.onDegraded?.();
     if (!cached) return [];

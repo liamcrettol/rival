@@ -55,6 +55,22 @@ export function isTrialsStatsQuotaError(error: unknown): boolean {
   return normalized.includes("database reads limit") || normalized.includes("current billing cycle") || normalized.includes("rate limit");
 }
 
+// Broader than isTrialsStatsQuotaError on purpose: callers that can fall back
+// to an already-good cached result (matchHallOfFame's degrade-to-cache path)
+// want to catch any Appwrite-side outage - a network blip, a 5xx, a timeout -
+// not just a billing-quota rejection. isTrialsStatsQuotaError itself stays
+// narrow because its other callers (the sync-trials-kd/trialsBackfill crons)
+// use it to specifically short-circuit further work on quota exhaustion, and
+// broadening that would make them stop retrying on transient errors that
+// should just be retried next run. AppwriteExceptionRef is only set once
+// getDatabases() has run at least once in this process, same caveat as
+// isNotFound above; a bug unrelated to Appwrite (a plain TypeError, etc.)
+// still isn't an AppwriteException and correctly still propagates.
+export function isTrialsStatsUnavailableError(error: unknown): boolean {
+  if (isTrialsStatsQuotaError(error)) return true;
+  return AppwriteExceptionRef !== null && error instanceof AppwriteExceptionRef;
+}
+
 export function needsTrialsStatsFetch(doc: TrialsStatsDoc | undefined | null): boolean {
   return !doc || Date.now() - new Date(doc.fetchedAt).getTime() > (doc.lastError ? ERROR_RETRY_MS : FRESH_MS);
 }
