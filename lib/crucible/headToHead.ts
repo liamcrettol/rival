@@ -74,20 +74,35 @@ async function loadMatchMetadata(db: Db, instanceIds: string[]): Promise<Map<str
     .in("instance_id", instanceIds);
   if (error) throw new Error(`Head-to-head match lookup failed: ${error.message}`);
 
-  await Promise.all((data ?? []).map(async (match: MatchMetadataRow) => {
+  const rows = (data ?? []) as MatchMetadataRow[];
+
+  // Dedupe activity-hash lookups across the batch before resolving, mirroring
+  // matchHistory.ts's repairStaleModeBuckets - otherwise a viewer with many
+  // legacy "other"-bucket rows sharing the same few activity hashes triggers
+  // redundant, unbatched Bungie API calls per request (#36).
+  const hashes = [...new Set(rows
+    .filter((row) => row.mode_bucket === "other" && row.activity_hash != null)
+    .flatMap((row) => [row.activity_hash, row.director_activity_hash])
+    .filter((hash): hash is number => hash !== null)
+    .map(Number))];
+
+  const definitions = new Map<number, Awaited<ReturnType<typeof resolveActivity>>>();
+  await Promise.all(hashes.map(async (hash) => {
+    definitions.set(hash, await resolveActivity(hash));
+  }));
+
+  for (const match of rows) {
     const storedModes = match.activity_modes ?? [];
     let activityModes = storedModes;
     let modeBucket = match.mode_bucket;
     // Older imports did not merge activity-definition modes, so a competitive
     // Clash can arrive with only the generic Clash mode (71) and be mislabeled.
     if (match.activity_hash != null && modeBucket === "other") {
-      const [definition, directorDefinition] = await Promise.all([
-        resolveActivity(Number(match.activity_hash)),
-        match.director_activity_hash == null
-          ? Promise.resolve(null)
-          : resolveActivity(Number(match.director_activity_hash)),
-      ]);
-      activityModes = [...new Set([...storedModes, ...definition.modes, ...(directorDefinition?.modes ?? [])])];
+      const definition = definitions.get(Number(match.activity_hash));
+      const directorDefinition = match.director_activity_hash == null
+        ? null
+        : definitions.get(Number(match.director_activity_hash)) ?? null;
+      activityModes = [...new Set([...storedModes, ...(definition?.modes ?? []), ...(directorDefinition?.modes ?? [])])];
       modeBucket = classifyCrucibleMode({
         activityMode: match.activity_mode,
         activityModes,
@@ -97,7 +112,7 @@ async function loadMatchMetadata(db: Db, instanceIds: string[]): Promise<Map<str
       });
     }
     metadata.set(match.instance_id, metadataForRow(match, modeBucket, activityModes));
-  }));
+  }
   return metadata;
 }
 

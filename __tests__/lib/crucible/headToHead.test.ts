@@ -1,3 +1,8 @@
+const mockResolveActivity = jest.fn();
+jest.mock("@/lib/bungie/pgcr", () => ({
+  resolveActivity: (...args: unknown[]) => mockResolveActivity(...args),
+}));
+
 import { getHeadToHeadSummaries, summarizeEncounterRows, type EncounterRow } from "@/lib/crucible/headToHead";
 
 const row = (overrides: Partial<EncounterRow> = {}): EncounterRow => ({
@@ -98,5 +103,55 @@ describe("getHeadToHeadSummaries", () => {
     expect(requestedBatches.map((batch) => batch.length)).toEqual([50, 1]);
     expect(summaries["opp-50"]).toMatchObject({ encounters: 1, wins: 1, losses: 0 });
     expect(summaries["opp-50"].recentMeetings[0].modeName).toBe("Control");
+  });
+
+  it("dedupes Bungie activity-definition lookups by hash for legacy 'other'-bucket rows (#36)", async () => {
+    mockResolveActivity.mockReset();
+    mockResolveActivity.mockResolvedValue({ name: "Endless Vale", image: "/img.jpg", modes: [69] });
+
+    const encounters = [
+      row({ instance_id: "match-1" }),
+      row({ instance_id: "match-2" }),
+      row({ instance_id: "match-3" }),
+    ];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db: any = {
+      from(table: string) {
+        const chain = {
+          select: () => chain,
+          eq: () => chain,
+          order: () => chain,
+          limit: () => chain,
+          in: () => chain,
+          then(resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) {
+            const data = table === "crucible_encounters"
+              ? encounters
+              // All three legacy rows share the same activity_hash (and no
+              // director_activity_hash) - the fix should resolve it once.
+              : encounters.map((entry) => ({
+                  instance_id: entry.instance_id,
+                  activity_hash: 12345,
+                  director_activity_hash: null,
+                  activity_name: "Endless Vale",
+                  activity_mode: 71,
+                  activity_modes: [71],
+                  mode_bucket: "other",
+                }));
+            return Promise.resolve({ data, error: null }).then(resolve, reject);
+          },
+        };
+        return chain;
+      },
+    };
+
+    const summaries = await getHeadToHeadSummaries({
+      viewerUserId: "viewer",
+      opponentMembershipIds: ["opp-1"],
+      db,
+    });
+
+    expect(mockResolveActivity).toHaveBeenCalledTimes(1);
+    expect(mockResolveActivity).toHaveBeenCalledWith(12345);
+    expect(summaries["opp-1"].encounters).toBe(3);
   });
 });
