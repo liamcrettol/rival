@@ -1,8 +1,25 @@
 import type { Databases, AppwriteException as AppwriteExceptionType } from "node-appwrite";
+import { raceTimeout } from "@/lib/appwrite/timeout";
 
 const FRESH_MS = 14 * 24 * 60 * 60 * 1000;
 const ERROR_RETRY_MS = 3 * 24 * 60 * 60 * 1000;
 const COLLECTION_ID = "trials-stats";
+// Bounds how long a single Appwrite call waits before this module treats it
+// as unavailable instead of hanging until Vercel's hard maxDuration kill
+// (#42). node-appwrite has no AbortSignal hook, so this can only stop
+// waiting, not cancel the request - see lib/appwrite/timeout.ts.
+const CALL_TIMEOUT_MS = 8_000;
+
+export class AppwriteTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AppwriteTimeoutError";
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, opName: string): Promise<T> {
+  return raceTimeout(promise, CALL_TIMEOUT_MS, opName, (message) => new AppwriteTimeoutError(message));
+}
 
 export interface TrialsStatsDoc {
   membershipId: string;
@@ -68,6 +85,7 @@ export function isTrialsStatsQuotaError(error: unknown): boolean {
 // still isn't an AppwriteException and correctly still propagates.
 export function isTrialsStatsUnavailableError(error: unknown): boolean {
   if (isTrialsStatsQuotaError(error)) return true;
+  if (error instanceof AppwriteTimeoutError) return true;
   return AppwriteExceptionRef !== null && error instanceof AppwriteExceptionRef;
 }
 
@@ -77,7 +95,13 @@ export function needsTrialsStatsFetch(doc: TrialsStatsDoc | undefined | null): b
 
 export async function getTrialsStats(membershipId: string): Promise<TrialsStatsDoc | null> {
   try {
-    return fromDocument(await (await getDatabases()).getDocument({ databaseId: env("APPWRITE_DATABASE_ID"), collectionId: process.env.APPWRITE_TRIALS_STATS_COLLECTION_ID || COLLECTION_ID, documentId: membershipId }));
+    const db = await getDatabases();
+    return fromDocument(
+      await withTimeout(
+        db.getDocument({ databaseId: env("APPWRITE_DATABASE_ID"), collectionId: process.env.APPWRITE_TRIALS_STATS_COLLECTION_ID || COLLECTION_ID, documentId: membershipId }),
+        "getDocument"
+      )
+    );
   } catch (error) {
     if (isNotFound(error)) return null;
     throw error;
@@ -100,7 +124,10 @@ export async function listTrialsStats(membershipIds: string[]): Promise<Map<stri
   // dominant cost of a request - run them concurrently instead.
   const responses = await Promise.all(
     batches.map((batch) =>
-      db.listDocuments({ databaseId, collectionId, queries: [Query.equal("$id", batch), Query.limit(batch.length)] })
+      withTimeout(
+        db.listDocuments({ databaseId, collectionId, queries: [Query.equal("$id", batch), Query.limit(batch.length)] }),
+        "listDocuments"
+      )
     )
   );
 
@@ -114,9 +141,9 @@ export async function listTrialsStats(membershipIds: string[]): Promise<Map<stri
 export async function upsertTrialsStats(input: { membershipId: string; membershipType: number; trialsKills: number; trialsDeaths: number; trialsActivitiesEntered: number; charactersChecked: number; lastError: string | null }): Promise<void> {
   const db = await getDatabases();
   const params = { databaseId: env("APPWRITE_DATABASE_ID"), collectionId: process.env.APPWRITE_TRIALS_STATS_COLLECTION_ID || COLLECTION_ID, documentId: input.membershipId, data: { membership_type: input.membershipType, trials_kills: input.trialsKills, trials_deaths: input.trialsDeaths, trials_activities_entered: input.trialsActivitiesEntered, characters_checked: input.charactersChecked, last_error: input.lastError, fetched_at: new Date().toISOString() } };
-  try { await db.createDocument(params); } catch (error) {
+  try { await withTimeout(db.createDocument(params), "createDocument"); } catch (error) {
     if (!(AppwriteExceptionRef && error instanceof AppwriteExceptionRef && error.code === 409)) throw error;
-    await db.updateDocument(params);
+    await withTimeout(db.updateDocument(params), "updateDocument");
   }
 }
 

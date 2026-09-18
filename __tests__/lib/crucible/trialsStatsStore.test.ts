@@ -1,4 +1,4 @@
-import { isTrialsStatsQuotaError, isTrialsStatsUnavailableError } from "@/lib/crucible/trialsStatsStore";
+import { isTrialsStatsQuotaError, isTrialsStatsUnavailableError, AppwriteTimeoutError } from "@/lib/crucible/trialsStatsStore";
 
 describe("isTrialsStatsQuotaError", () => {
   it("recognizes Appwrite billing-cycle read exhaustion", () => {
@@ -35,5 +35,13 @@ describe("isTrialsStatsUnavailableError", () => {
     // still null - a TypeError/etc. here must never be mistaken for an
     // Appwrite-side failure just because the reference happens to be unset.
     expect(isTrialsStatsUnavailableError(new TypeError("cannot read properties of undefined"))).toBe(false);
+  });
+
+  it("recognizes a hung Appwrite call that timed out instead of erroring (#42)", () => {
+    // A hang never produces an AppwriteException - only raceTimeout's
+    // synthetic rejection does. Without this, a timed-out call would fall
+    // through to the false branch above and callers like matchHallOfFame's
+    // degrade-to-cache path would never catch it.
+    expect(isTrialsStatsUnavailableError(new AppwriteTimeoutError("getDocument timed out after 8000ms"))).toBe(true);
   });
 });

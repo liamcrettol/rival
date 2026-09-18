@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Storage, AppwriteException as AppwriteExceptionType } from "node-appwrite";
+import { raceTimeout } from "@/lib/appwrite/timeout";
 
 // Server-only PGCR object storage adapter (same convention as
 // lib/supabase/admin.ts: the repo has no "server-only" package, so the
@@ -28,6 +29,11 @@ const DEFAULT_BUCKET_ID = "pgcr-archive";
 const MAX_ATTEMPTS = 4;
 const BASE_BACKOFF_MS = 250;
 const MAX_BACKOFF_MS = 4_000;
+// Bounds how long a single attempt waits on a hung Appwrite call before
+// withRetry treats it as a transient failure and moves on (#42). 4 attempts
+// at this budget plus backoff stays comfortably under Vercel's 60s
+// maxDuration on every route that reaches this module.
+const PER_ATTEMPT_TIMEOUT_MS = 8_000;
 
 export type ArchiveErrorKind =
   | "invalid_id"
@@ -155,6 +161,10 @@ async function downloadExactBytes(instanceId: string): Promise<Buffer> {
   const response = await fetch(url, {
     method: "GET",
     cache: "no-store",
+    // Unlike the SDK calls below, native fetch supports real cancellation -
+    // this actually aborts the in-flight request on timeout rather than
+    // just abandoning the wait (#42).
+    signal: AbortSignal.timeout(PER_ATTEMPT_TIMEOUT_MS),
     headers: {
       "X-Appwrite-Project": requireEnv("APPWRITE_PROJECT_ID"),
       "X-Appwrite-Key": requireEnv("APPWRITE_API_KEY"),
@@ -214,7 +224,13 @@ async function withRetry<T>(op: () => Promise<T>, opName: string): Promise<T> {
   let lastError: PgcrArchiveError | null = null;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
-      return await op();
+      // A hang (not an error - Appwrite just never responds) would otherwise
+      // block this attempt until Vercel's hard maxDuration kill, skipping
+      // every graceful-degradation path below since those only trigger on a
+      // rejected promise. raceTimeout forces a rejection so classifyError's
+      // existing "unrecognized error -> transient" fallback can retry it
+      // like any other transient failure (#42).
+      return await raceTimeout(op(), PER_ATTEMPT_TIMEOUT_MS, opName);
     } catch (err) {
       const classified = classifyError(err);
       if (!classified.retryable || attempt === MAX_ATTEMPTS - 1) throw classified;
