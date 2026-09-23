@@ -35,14 +35,20 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Check bungie_accounts, not users: the callback route writes users
+    // before bungie_accounts, so a process killed between those two writes
+    // leaves a users row with no bungie_accounts row. Checking users alone
+    // would never treat that candidate as an orphan, leaking its signup
+    // slot forever even though the account was never actually completed
+    // (same class of bug as Rerolled's #391).
     const { data, error } = await withSupabaseTimeout(
-      adminSupabase.from("users").select("id").in("id", body.userIds),
+      adminSupabase.from("bungie_accounts").select("user_id").in("user_id", body.userIds),
       2_000
     );
     if (error) throw new Error(error.message);
 
     return NextResponse.json(
-      { existingUserIds: (data ?? []).map((row: { id: string }) => row.id) },
+      { existingUserIds: (data ?? []).map((row: { user_id: string }) => row.user_id) },
       { headers: { "Cache-Control": "no-store, private" } }
     );
   } catch (error) {
