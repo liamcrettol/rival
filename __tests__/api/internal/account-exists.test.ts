@@ -49,15 +49,28 @@ it("rejects a batch over the size limit", async () => {
   expect(res.status).toBe(400);
 });
 
-it("returns which of the requested user ids have a real Rival account", async () => {
-  mockIn.mockResolvedValue({ data: [{ id: "user-1" }, { id: "user-3" }], error: null });
+it("returns which of the requested user ids have a completed bungie_accounts row", async () => {
+  mockIn.mockResolvedValue({ data: [{ user_id: "user-1" }, { user_id: "user-3" }], error: null });
 
   const res = await POST(req({ userIds: ["user-1", "user-2", "user-3"] }));
   const body = await res.json();
 
   expect(res.status).toBe(200);
   expect(body.existingUserIds.sort()).toEqual(["user-1", "user-3"]);
-  expect(mockIn).toHaveBeenCalledWith("id", ["user-1", "user-2", "user-3"]);
+  expect(mockIn).toHaveBeenCalledWith("user_id", ["user-1", "user-2", "user-3"]);
+});
+
+it("does not treat a users row with no matching bungie_accounts row as existing (#391-style orphan)", async () => {
+  // user-2 has a users row (created before bungie_accounts) but the
+  // bungie_accounts write never completed - it must show up as NOT existing
+  // so reconcile-signup-slots can release its leaked slot.
+  mockIn.mockResolvedValue({ data: [{ user_id: "user-1" }], error: null });
+
+  const res = await POST(req({ userIds: ["user-1", "user-2"] }));
+  const body = await res.json();
+
+  expect(res.status).toBe(200);
+  expect(body.existingUserIds).toEqual(["user-1"]);
 });
 
 it("returns 503 instead of masking a query failure as no accounts existing", async () => {
