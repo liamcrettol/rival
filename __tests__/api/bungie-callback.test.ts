@@ -338,7 +338,7 @@ describe("signup capacity check for returning users (#7)", () => {
   // straight through to minting a session cookie without releasing the
   // slot it had reserved, silently leaking one of the 150 lifetime slots
   // on every transient blip.
-  it("releases the reserved slot when the users upsert fails transiently, even though login still succeeds", async () => {
+  it("fails closed and releases the reserved slot when the users upsert fails transiently for a new user", async () => {
     setup(false);
     const bungieAccountsUpsert = jest.fn().mockReturnThis();
     mockFrom.mockImplementation((table: string) => {
@@ -376,12 +376,13 @@ describe("signup capacity check for returning users (#7)", () => {
       new NextRequest("https://test.app/api/auth/bungie/callback?code=abc&state=valid-state"),
     );
 
-    // Degraded-mode login still succeeds (that's the intended fallback)...
-    expect(res.headers.get("location")).toBe("https://test.app/dashboard");
-    // ...the bungie_accounts write is skipped entirely for this request...
+    // A fresh signup has no account to fall back on: no session is issued.
+    expect(res.headers.get("location")).toBe(
+      "https://test.app/auth/error?error=user_upsert_transient_failure",
+    );
     expect(bungieAccountsUpsert).not.toHaveBeenCalled();
-    // ...but the reserved slot must not leak just because no error ever
-    // reached the accountErr release branch.
+    expect(encode).not.toHaveBeenCalled();
+    // The reserved slot must be given back.
     expect(mockReleaseSignupSlot).toHaveBeenCalledWith("user-1");
   });
 
@@ -391,7 +392,7 @@ describe("signup capacity check for returning users (#7)", () => {
   // through to a session-only login without ever releasing the slot, so no
   // bungie_accounts row exists for this user and none of their previously
   // reserved 150-cap slot is ever given back.
-  it("releases the reserved slot when the bungie_accounts upsert fails transiently, even though login still succeeds", async () => {
+  it("fails closed and releases the reserved slot when the bungie_accounts upsert fails transiently for a new user", async () => {
     setup(false);
     const bungieAccountsUpsert = jest.fn().mockReturnThis();
     mockFrom.mockImplementation((table: string) => {
@@ -422,11 +423,12 @@ describe("signup capacity check for returning users (#7)", () => {
       new NextRequest("https://test.app/api/auth/bungie/callback?code=abc&state=valid-state"),
     );
 
-    // Degraded-mode login still succeeds (that's the intended fallback)...
-    expect(res.headers.get("location")).toBe("https://test.app/dashboard");
+    expect(res.headers.get("location")).toBe(
+      "https://test.app/auth/error?error=account_upsert_transient_failure",
+    );
     expect(bungieAccountsUpsert).toHaveBeenCalled();
-    // ...but the reserved slot must not leak just because the transient
-    // branch never used to reach a release call.
+    expect(encode).not.toHaveBeenCalled();
+    expect(mockReleaseSignupSlot).toHaveBeenCalledTimes(1);
     expect(mockReleaseSignupSlot).toHaveBeenCalledWith("user-1");
   });
 });
