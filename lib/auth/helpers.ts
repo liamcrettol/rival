@@ -177,8 +177,10 @@ async function refreshBungieToken(userId: string, refreshTokenEnc: string): Prom
     ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
     : null;
 
-  const persistUpdate = () =>
-    withSupabaseTimeout(
+  // Resolved { error } results are surfaced as throws so a failed write is not
+  // mistaken for a clean "0 rows matched" CAS loss.
+  const persistUpdate = async () => {
+    const result = await withSupabaseTimeout(
       adminSupabase
         .from("bungie_accounts")
         .update({
@@ -192,6 +194,9 @@ async function refreshBungieToken(userId: string, refreshTokenEnc: string): Prom
         .eq("refresh_token_enc", refreshTokenEnc)
         .select("user_id")
     );
+    if (result.error) throw new Error(result.error.message);
+    return result;
+  };
 
   // Bungie has already rotated the refresh token server-side by this point -
   // the ciphertext we just redeemed is dead there regardless of whether this

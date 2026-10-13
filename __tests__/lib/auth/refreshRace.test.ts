@@ -20,11 +20,13 @@ const dbState: {
   updateResult: Row[];
   updates: Array<{ patch: Record<string, unknown>; filters: Array<[string, unknown]> }>;
   updateThrows: Error[];
+  updateErrors: Array<{ message: string }>;
 } = {
   reads: [],
   updateResult: [],
   updates: [],
   updateThrows: [],
+  updateErrors: [],
 };
 
 jest.mock("@/lib/supabase/admin", () => ({
@@ -49,7 +51,9 @@ jest.mock("@/lib/supabase/admin", () => ({
               dbState.updates.push({ patch, filters });
               const err = dbState.updateThrows.shift();
               if (err) throw err;
-              return { data: dbState.updateResult };
+              const resolvedError = dbState.updateErrors.shift();
+              if (resolvedError) return { data: null, error: resolvedError };
+              return { data: dbState.updateResult, error: null };
             },
           };
           return updateBuilder;
@@ -96,6 +100,7 @@ describe("getBungieToken refresh race protection", () => {
     dbState.updateResult = [];
     dbState.updates = [];
     dbState.updateThrows = [];
+    dbState.updateErrors = [];
   });
 
   it("compare-and-swaps the token write against the refresh ciphertext it read", async () => {
@@ -174,6 +179,19 @@ describe("getBungieToken refresh race protection", () => {
       expect.objectContaining({ userId: "user-1" })
     );
     errSpy.mockRestore();
+  });
+
+  // supabase-js reports PostgREST failures as a resolved { data: null, error }
+  // rather than throwing. That must count as a persist failure (retry + error
+  // log), not a lost CAS race, or the rotated refresh token is never stored.
+  it("retries when the persist resolves with an error object instead of throwing", async () => {
+    dbState.reads = [accountRow()];
+    dbState.updateErrors = [{ message: "canceling statement due to statement timeout" }];
+    dbState.updateResult = [{ user_id: "user-1" }];
+    mockBungie(200, { access_token: "new-access", refresh_token: "new-refresh", expires_in: 3600 });
+
+    await expect(getBungieToken("user-1", "500")).resolves.toBe("new-access");
+    expect(dbState.updates).toHaveLength(2);
   });
 
   it("fails fast when the tokens were issued by a different OAuth app", async () => {
