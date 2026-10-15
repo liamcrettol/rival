@@ -33,12 +33,18 @@ NextAuth v5 beta (custom Bungie provider) / Vercel.
 - H2H copy says "Recorded encounters" and never claims complete lifetime
   coverage (Bungie history availability + privacy limit it).
 
-## Design system (same as Rerolled's flat DIM-style)
+## Design system (same as Rerolled's, redesigned 2026-10-15)
 
-- Zero border radius, no gradients, no glassmorphism, no emoji, no webfonts.
-- Tokens in globals.css / tailwind `bungie.*`: bg `#101216`, panels `#171a1f`,
-  1px strokes `#2a2e36`, single accent `#00aeef` (hover `#26bcf3`).
-- Reuse `.panel` and `.section-label` for every surface/section header.
+- Zero border radius, no gradients, no glassmorphism, no emoji, no glow rings.
+- Tokens in globals.css / tailwind `bungie.*`: bg `#0a0b0d`, panels `#121417`,
+  1px strokes `#24272c`. The accent is off-white `#f2f1ed` (`bungie-blue` keeps its
+  old name; solid fills take `text-bungie-dark`). No cyan.
+- Type: Archivo (variable width) + IBM Plex Mono via next/font in `app/layout.tsx`.
+  `.font-wide` = widened caps, for big names and titles only.
+- One focal point per screen. The home hero is your most faced rival (or the
+  Guardian you searched) with a huge name and record; everything else is quiet
+  hairline rows. Green and red only for wins and losses.
+- Reuse `.section-label` for section headers.
 - Never use em dashes anywhere in user-facing text. Use a period, comma, or
   separate sentence instead.
 

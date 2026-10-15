@@ -56,10 +56,10 @@ export default async function Dashboard() {
   return (
     <div className="min-h-screen bg-bungie-dark">
       <header className="border-b border-bungie-border">
-        <div className="mx-auto flex h-[4.5rem] max-w-7xl items-center gap-6 px-4 sm:px-6">
+        <div className="mx-auto flex h-16 max-w-[1240px] items-center gap-6 px-4 sm:px-8">
           <span className="flex items-center gap-2.5">
-            <BrandMark className="h-7 w-7" />
-            <span className="text-xl font-bold uppercase tracking-[0.12em]">Rival</span>
+            <BrandMark className="h-6 w-6" />
+            <span className="font-wide text-[15px] font-bold">Rival</span>
           </span>
           <RerolledNavLink />
           <div className="ml-auto flex items-center gap-3">
@@ -71,7 +71,7 @@ export default async function Dashboard() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+      <main className="mx-auto max-w-[1240px] px-4 py-10 sm:px-8 sm:py-14">
         <CrucibleHistorySync />
         <OpponentSearch>
           <MatchHistoryPanel matches={history.matches} syncStatus={history.syncStatus} needsReauth={history.needsReauth} />

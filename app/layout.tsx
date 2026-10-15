@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
+import { Archivo, IBM_Plex_Mono } from "next/font/google";
+
 import "./globals.css";
 import Providers from "@/components/Providers";
+
+// Archivo (variable width) + IBM Plex Mono, shared with Rerolled.
+const archivo = Archivo({ subsets: ["latin"], axes: ["wdth"], variable: "--font-archivo", display: "swap" });
+const plexMono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-plex-mono", display: "swap" });
 
 const DESCRIPTION =
   "Destiny 2 Crucible match history and head-to-head records. See how many times you have beaten the player across the map.";
@@ -28,7 +34,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${archivo.variable} ${plexMono.variable}`}>
       <body className="min-h-screen bg-bungie-dark text-gray-100 antialiased">
         <Providers>{children}</Providers>
       </body>
