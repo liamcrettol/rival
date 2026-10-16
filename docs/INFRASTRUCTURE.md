@@ -303,9 +303,20 @@ cd ~/smoke && SERVICE_KEY="$(cat ~/rival-db/service-role.jwt)" \
 - **Indexes removed in 028:** `crucible_encounters_mode_idx` (4 scans) and
   `crucible_match_players_team_idx` (covered by `member_idx`). Don't re-add
   them without scan evidence.
-- **Slow spot to know about:** `materialize_sitewide_crucible_viewers` takes
-  about 5 to 6 s for heavy users. It works, but it's the next candidate for
-  the 030 treatment.
+- **Viewer materialization is incremental** (migration **032**).
+  `materialize_sitewide_crucible_viewers(p_user_ids)` only processes a user's
+  matches that have no `crucible_match_viewers` row yet, or whose
+  `crucible_matches.updated_at` moved past the viewer row's
+  `encounters_checked_at` (falling back to `created_at`). It then stamps
+  `encounters_checked_at`. The heaviest user (30,835 matches) went from
+  1.8 s warm or 10 to 14 s cold to **0.3 s**, with byte-identical results
+  (fingerprint test). The first run per user is slow (about 17 s for the
+  heaviest), so all existing users were run once by
+  `~/rival-db/settle-materialize.sh` on 2026-10-16. The `p_user_ids is null`
+  (last hour) cron path is unchanged. **Anything that re-imports a match must
+  bump `crucible_matches.updated_at`**, or its encounters won't be re-derived.
+- Never run `materialize_sitewide_crucible_viewers` for all users at once on
+  the live server; even read-heavy, it saturates the 2 GB box for minutes.
 - `database_size_bytes()` and the `[database-capacity]` alarm in the
   sync-crucible cron still use the Supabase Pro threshold (6.4 GB of 8 GB).
   The real limit now is the 60 GB disk. Update the threshold when convenient.
@@ -320,6 +331,7 @@ cd ~/smoke && SERVICE_KEY="$(cat ~/rival-db/service-role.jwt)" \
 | 029b emblem backfill | partly run, cron removed | functions and state table present, not scheduled |
 | 030 fast identity lookups | **not applied** | applied |
 | 031 emblem trigger fix | **not applied** | applied |
+| 032 incremental viewer materialization | **not applied** | applied |
 
 ---
 
@@ -379,8 +391,7 @@ cd ~/smoke && SERVICE_KEY="$(cat ~/rival-db/service-role.jwt)" \
    `trials_backfill_candidates` refresh from older migrations were not running.
    Decide whether they should be, then add them to the server crontab the same
    way as reconcile.
-10. **Speed up `materialize_sitewide_crucible_viewers`** (about 5 to 6 s).
-11. The `preview-lightsail` branch on GitHub can be deleted.
+10. The `preview-lightsail` branch on GitHub can be deleted.
 
 ---
 
