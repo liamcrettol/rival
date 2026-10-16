@@ -6,7 +6,7 @@
 // way to know signing in again would fix it. Uses instanceIds: [] to hit the
 // early return right after the sync-state read, without needing to mock the
 // full match/roster pipeline.
-import { getCrucibleMatchHistory } from "@/lib/crucible/matchHistory";
+import { getCrucibleMatchHistory, withResolvedEmblem } from "@/lib/crucible/matchHistory";
 
 type Row = Record<string, unknown>;
 
@@ -70,5 +70,35 @@ describe("getCrucibleMatchHistory needsReauth", () => {
 
     const result = await getCrucibleMatchHistory("user-1", { instanceIds: [], db });
     expect(result).toEqual({ matches: [], syncStatus: "idle", needsReauth: false });
+  });
+});
+
+describe("withResolvedEmblem", () => {
+  const base = {
+    instance_id: "1",
+    membership_id: "4611686018400000000",
+    membership_type: 3,
+    display_name: "Guardian#0001",
+    team_id: 17,
+    is_win: true,
+    kills: 10,
+    deaths: 5,
+    assists: 2,
+  };
+
+  it("reads the interned emblem when the inline column is empty", () => {
+    const row = withResolvedEmblem({ ...base, emblem_path: null, emblem: { path: "/common/a.jpg" } });
+    expect(row.emblem_path).toBe("/common/a.jpg");
+    expect(row).not.toHaveProperty("emblem");
+  });
+
+  it("prefers an inline emblem that has not been backfilled yet", () => {
+    const row = withResolvedEmblem({ ...base, emblem_path: "/common/inline.jpg", emblem: null });
+    expect(row.emblem_path).toBe("/common/inline.jpg");
+  });
+
+  it("returns null when neither source has an emblem", () => {
+    expect(withResolvedEmblem({ ...base, emblem_path: null, emblem: null }).emblem_path).toBeNull();
+    expect(withResolvedEmblem({ ...base, emblem_path: "" }).emblem_path).toBeNull();
   });
 });

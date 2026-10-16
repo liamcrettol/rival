@@ -59,6 +59,11 @@ NextAuth v5 beta (custom Bungie provider) / Vercel.
   own `DATABASE_URL` in `.env.local`, session pooler string from the Supabase
   dashboard). Don't leave migration files unapplied.
 - This is Rival's own Supabase project. Never point env vars at Rerolled's.
+- Emblem paths are stored once in `crucible_emblems` (029a). A trigger on
+  `crucible_match_players` interns `emblem_path` into `emblem_id` and nulls
+  the column, so writers keep sending `emblem_path`; readers resolve
+  `emblem_path` first, then `crucible_emblems.path`. Don't add new long
+  strings repeated per roster row (7M+ rows).
 
 ## Testing
 

@@ -1,0 +1,21 @@
+-- ============================================================
+-- 028 - Drop two indexes that cost ~309 MB and buy nothing.
+--
+-- Measured on the live database (stats since 2026-06-30):
+--   crucible_encounters_mode_idx       101 MB, 4 scans
+--   crucible_match_players_team_idx    208 MB, 20,237 scans
+--
+-- mode_idx (viewer_user_id, mode_bucket, played_at desc) is effectively
+-- unused: history_idx (viewer_user_id, played_at desc) and pair_idx serve
+-- every viewer-scoped read.
+--
+-- team_idx (membership_id, team_id) does get picked, but only for
+-- membership_id lookups, and member_idx (membership_id, instance_id) has the
+-- same leading column. No query filters on team_id without instance_id.
+--
+-- Run each statement on its own (CONCURRENTLY cannot run inside a
+-- transaction block, and db-query.mjs sends a file as one implicit
+-- transaction): run each line by itself in the SQL editor or db-query.mjs.
+-- ============================================================
+drop index concurrently if exists public.crucible_encounters_mode_idx;
+drop index concurrently if exists public.crucible_match_players_team_idx;

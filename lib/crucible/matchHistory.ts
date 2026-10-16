@@ -42,6 +42,15 @@ interface PlayerRow {
   assists: number | null;
 }
 
+// Emblem paths are stored once in crucible_emblems (migration 029a); rows
+// written before the backfill finishes may still carry emblem_path inline.
+export type RawPlayerRow = PlayerRow & { emblem?: { path: string | null } | null };
+
+export function withResolvedEmblem(row: RawPlayerRow): PlayerRow {
+  const { emblem, ...player } = row;
+  return { ...player, emblem_path: player.emblem_path || emblem?.path || null };
+}
+
 function kd(kills: number | null, deaths: number | null): number | null {
   if (kills === null || deaths === null) return null;
   return deaths === 0 ? kills : Math.round((kills / deaths) * 100) / 100;
@@ -177,12 +186,12 @@ export async function getCrucibleMatchHistory(
   // Rival's history is pure imported Crucible data. The Rerolled-side
   // enrichment (challenge titles, rolled loadouts, lobby modes) lives in the
   // roulette app's database and can come back later as a cross-site lookup.
-  const { data: playerRows, error: playerError } = await db.from("crucible_match_players").select("instance_id, membership_id, membership_type, display_name, emblem_path, team_id, is_win, kills, deaths, assists").in("instance_id", instanceIds);
+  const { data: playerRows, error: playerError } = await db.from("crucible_match_players").select("instance_id, membership_id, membership_type, display_name, emblem_path, emblem:crucible_emblems(path), team_id, is_win, kills, deaths, assists").in("instance_id", instanceIds);
   if (matchError) throw new Error(`Crucible match lookup failed: ${matchError.message}`);
   if (playerError) throw new Error(`Crucible roster lookup failed: ${playerError.message}`);
 
   const matchRows = await repairStaleModeBuckets((rawMatchRows ?? []) as MatchRow[], db, resolveDef);
-  let typedPlayers = (playerRows ?? []) as PlayerRow[];
+  let typedPlayers = ((playerRows ?? []) as RawPlayerRow[]).map(withResolvedEmblem);
   const identityIds = [...new Set(typedPlayers
     .filter((row) => !row.emblem_path || !row.membership_type || isPlaceholderPlayerName(row.display_name))
     .map((row) => row.membership_id))];
