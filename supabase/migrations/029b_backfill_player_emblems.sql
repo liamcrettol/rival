@@ -1,7 +1,7 @@
 -- ============================================================
 -- 029b - Move existing emblem_path values into crucible_emblems.
 --
--- Requires 029a. Runs as a pg_cron job, one batch of matches a minute,
+-- Requires 029a. Runs as a pg_cron job, one batch of rows a minute,
 -- walking crucible_match_players by its primary key so every batch is an
 -- index range rather than a table scan. The job unschedules itself when the
 -- cursor runs past the last match. Rerunning this file is safe: the
@@ -15,6 +15,10 @@
 -- same page as HOT updates and the indexes do not grow. The lowered
 -- autovacuum threshold below keeps dead rows recycled during the run; it
 -- is reset when the job finishes.
+--
+-- Measured 2026-10-16: ~1.2 ms per row (the 029a trigger and the emblem_id
+-- foreign key run per row), so 20,000 rows is ~25 s of work a minute and the
+-- full ~7.1M rows take about 6 hours. pg_cron never overlaps runs of a job.
 --
 -- Progress: select * from public.crucible_emblem_backfill;
 -- ============================================================
@@ -37,7 +41,7 @@ insert into public.crucible_emblem_backfill (id) values (true) on conflict (id) 
 
 alter table public.crucible_match_players set (autovacuum_vacuum_scale_factor = 0.01);
 
-create or replace function public.backfill_crucible_player_emblems(p_matches integer default 20000)
+create or replace function public.backfill_crucible_player_emblems(p_rows integer default 20000)
 returns bigint
 language plpgsql
 security definer
@@ -50,13 +54,17 @@ declare
 begin
   select last_instance_id into v_from from public.crucible_emblem_backfill where id;
 
+  -- Plain primary-key order with a row limit, so this is an index-only
+  -- range read. (select distinct here let the planner pick a full scan.)
+  -- The update below takes every row up to v_to, so the last match in a
+  -- batch is never split.
   select max(instance_id) into v_to
   from (
-    select distinct instance_id
+    select instance_id
     from public.crucible_match_players
     where instance_id > v_from
     order by instance_id
-    limit greatest(p_matches, 1)
+    limit greatest(p_rows, 1)
   ) batch;
 
   if v_to is null then
