@@ -39,20 +39,9 @@ NextAuth v5 beta (custom Bungie provider) / Vercel.
 - H2H copy says "Recorded encounters" and never claims complete lifetime
   coverage (Bungie history availability + privacy limit it).
 
-## Design system (same as Rerolled's, redesigned 2026-10-15)
+## Design system: mida.tools
 
-- Zero border radius, no gradients, no glassmorphism, no emoji, no glow rings.
-- Tokens in globals.css / tailwind `bungie.*`: bg `#0a0b0d`, panels `#121417`,
-  1px strokes `#24272c`. The accent is off-white `#f2f1ed` (`bungie-blue` keeps its
-  old name; solid fills take `text-bungie-dark`). No cyan.
-- Type: Archivo (variable width) + IBM Plex Mono via next/font in `app/layout.tsx`.
-  `.font-wide` = widened caps, for big names and titles only.
-- One focal point per screen. The home hero is your most faced rival (or the
-  Guardian you searched) with a huge name and record; everything else is quiet
-  hairline rows. Green and red only for wins and losses.
-- Reuse `.section-label` for section headers.
-- Never use em dashes anywhere in user-facing text. Use a period, comma, or
-  separate sentence instead.
+Follow [the shared MIDA brief](docs/MIDA_DESIGN_BRIEF.md). The approved hub is minimal and names-first. Use Archivo 400/500/600, neutral light/dark tokens, plain text actions, generous spacing and a small orange signal. No tape treatments, decorative logos, gradients, shadows or uppercase labels. Theme defaults to the system and the browser remembers the choice. Preserve all existing tool behavior and semantic game information.
 
 ## Database
 

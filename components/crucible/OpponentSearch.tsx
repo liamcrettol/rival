@@ -56,9 +56,9 @@ function splitBungieName(name: string): [string, string] {
 function HeroName({ name }: { name: string }) {
   const [base, tag] = splitBungieName(name);
   return (
-    <h1 className="font-wide break-words text-[48px] font-extrabold leading-[0.9] sm:text-[84px]">
+    <h1 className="font-wide break-words text-[48px]  leading-[0.9] sm:text-[84px]">
       {base}
-      {tag && <span className="ml-3 align-baseline font-mono text-lg font-normal normal-case tracking-normal text-gray-500 sm:text-2xl">{tag}</span>}
+      {tag && <span className="ml-3 align-baseline tabular-nums text-lg font-normal normal-case tracking-normal text-gray-500 sm:text-2xl">{tag}</span>}
     </h1>
   );
 }
@@ -101,7 +101,7 @@ function RivalryList({
               onClick={() => onChoose(leader)}
               className="grid min-h-11 w-full grid-cols-[1.5rem_2.5rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-bungie-border py-3 text-left transition-colors hover:bg-white/[0.03]"
             >
-              <span className="font-mono text-xs text-gray-500">{leader.rank}</span>
+              <span className="tabular-nums text-xs text-gray-500">{leader.rank}</span>
               {bungieImg(leader.emblemPath) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={bungieImg(leader.emblemPath)} alt="" className="h-10 w-10 object-cover" />
@@ -114,7 +114,7 @@ function RivalryList({
                 <span className="block truncate font-semibold text-white">{leader.displayName}</span>
                 <span className="mt-0.5 block text-xs text-gray-500">{leader.encounters} meetings | last {formatDate(leader.lastPlayedAt)}</span>
               </span>
-              <span className="font-mono text-sm tabular-nums">
+              <span className="tabular-nums text-sm tabular-nums">
                 <span className={kind === "wins" ? "text-green-400" : "text-gray-400"}>{leader.wins}</span>
                 <span className="text-gray-500"> - </span>
                 <span className={kind === "losses" ? "text-red-400" : "text-gray-400"}>{leader.losses}</span>
@@ -337,19 +337,19 @@ export default function OpponentSearch({ children }: { children?: React.ReactNod
             aria-autocomplete="list"
             aria-expanded={results.length > 0}
             aria-controls="opponent-search-results"
-            className="h-12 w-full border border-white/15 bg-bungie-dark pl-11 pr-20 text-[15px] text-white placeholder:text-gray-500 focus:border-white/50 focus:outline-none"
+            className="h-12 w-full border border-white/15 bg-bungie-dark pl-11 pr-20 text-[15px] text-white placeholder:text-gray-500 "
           />
           <div className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center gap-2">
             {searching && <LoaderCircle className="animate-spin text-gray-300" size={16} />}
             {query && (
-              <button type="button" onClick={clear} aria-label="Clear player search" className="grid h-8 w-8 place-items-center text-gray-400 hover:text-white">
+              <button type="button" onClick={clear} aria-label="Clear player search" className="grid h-11 w-11 place-items-center text-gray-400 hover:text-white">
                 <X size={16} />
               </button>
             )}
           </div>
 
           {results.length > 0 && (
-            <div id="opponent-search-results" role="listbox" className="absolute z-50 mt-1 max-h-80 w-full overflow-y-auto border border-bungie-border bg-bungie-surface shadow-2xl">
+            <div id="opponent-search-results" role="listbox" className="absolute z-50 mt-1 max-h-80 w-full overflow-y-auto border border-bungie-border bg-bungie-surface ">
               {results.map((result, index) => (
                 <button
                   key={result.membershipId}
@@ -378,7 +378,7 @@ export default function OpponentSearch({ children }: { children?: React.ReactNod
                     </span>
                   </span>
                   {result.summary ? (
-                    <span className="text-right font-mono text-sm tabular-nums">
+                    <span className="text-right tabular-nums text-sm tabular-nums">
                       <span className="text-green-400">{result.summary.wins}</span>
                       <span className="text-gray-500"> - </span>
                       <span className="text-red-400">{result.summary.losses}</span>
@@ -418,7 +418,7 @@ export default function OpponentSearch({ children }: { children?: React.ReactNod
             <p className="section-label">{hero.label}</p>
             <HeroName name={hero.name} />
             <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
-              <span className="font-mono text-[52px] font-medium leading-none tabular-nums">
+              <span className="tabular-nums text-[52px] font-medium leading-none tabular-nums">
                 <span className="text-green-400">{hero.wins}</span>
                 <span className="text-gray-500"> - </span>
                 <span className="text-red-400">{hero.losses}</span>
@@ -453,7 +453,7 @@ export default function OpponentSearch({ children }: { children?: React.ReactNod
                       className={`flex min-h-11 items-center justify-between border-t border-bungie-border px-1 text-left text-[15px] transition-colors ${mode === filter.key ? "text-white" : "text-gray-400 hover:text-white"}`}
                     >
                       <span>{filter.label}</span>
-                      <span className="font-mono tabular-nums">{record.wins} - {record.losses}</span>
+                      <span className="tabular-nums tabular-nums">{record.wins} - {record.losses}</span>
                     </button>
                   );
                 })}
