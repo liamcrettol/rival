@@ -122,7 +122,7 @@ export default function HeadToHeadChip({
               <p className="mt-1 truncate text-sm font-semibold text-white">{opponentName}</p>
             </div>
             <div className="shrink-0 text-right">
-              <p className="font-mono text-sm text-gray-200">
+              <p className="tabular-nums text-sm text-gray-200">
                 <span className="text-green-300">{record.wins} W</span>
                 <span className="mx-2 text-bungie-border">/</span>
                 <span className="text-red-300">{record.losses} L</span>
@@ -138,10 +138,10 @@ export default function HeadToHeadChip({
                   key={item.key}
                   type="button"
                   onClick={() => setFilter(item.key)}
-                  className={`min-w-0 border-r border-bungie-border px-1 py-2 text-[10px] font-bold uppercase tracking-[0.04em] transition last:border-r-0 ${filter === item.key ? "bg-bungie-dark text-white" : "text-gray-400 hover:bg-bungie-dark/55 hover:text-white"}`}
+                  className={`min-w-0 border-r border-bungie-border px-1 py-2 text-[10px] font-bold   transition last:border-r-0 ${filter === item.key ? "bg-bungie-dark text-white" : "text-gray-400 hover:bg-bungie-dark/55 hover:text-white"}`}
                 >
                   <span className="block truncate">{item.label}</span>
-                  <span className={`mt-0.5 block font-mono text-[11px] ${filter === item.key ? "text-bungie-blue" : "text-gray-500"}`}>{count}</span>
+                  <span className={`mt-0.5 block tabular-nums text-[11px] ${filter === item.key ? "text-bungie-blue" : "text-gray-500"}`}>{count}</span>
                 </button>
               );
             })}
@@ -150,7 +150,7 @@ export default function HeadToHeadChip({
           <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="flex items-center justify-between gap-2 border-b border-bungie-border px-3 py-2">
               <p className="section-label">Recent meetings</p>
-              <p className="text-[10px] uppercase tracking-[0.08em] text-gray-400">Last {formatDate(summary.lastPlayedAt)}</p>
+              <p className="text-[10px]   text-gray-400">Last {formatDate(summary.lastPlayedAt)}</p>
             </div>
             {visibleMeetings.length > 0 ? (
               <div className="divide-y divide-bungie-border/60">
@@ -170,10 +170,10 @@ export default function HeadToHeadChip({
                       </p>
                     </div>
                     <span className="flex items-center gap-1.5">
-                      <span className={`font-mono text-[11px] font-bold ${meeting.viewerWon === true ? "text-green-300" : meeting.viewerWon === false ? "text-red-300" : "text-gray-400"}`}>
+                      <span className={`tabular-nums text-[11px] font-bold ${meeting.viewerWon === true ? "text-green-300" : meeting.viewerWon === false ? "text-red-300" : "text-gray-400"}`}>
                         {meeting.viewerWon === true ? "W" : meeting.viewerWon === false ? "L" : "-"}
                       </span>
-                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-gray-500 transition group-hover:text-bungie-blue">
+                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold   text-gray-500 transition group-hover:text-bungie-blue">
                         Report <ArrowUpRight size={11} />
                       </span>
                     </span>
@@ -196,7 +196,7 @@ export default function HeadToHeadChip({
         aria-expanded={open}
         aria-label={`Head-to-head record against ${opponentName}`}
         onClick={() => (open ? setOpen(false) : show())}
-        className="flex items-center border border-bungie-border bg-bungie-dark/55 px-2 py-1 font-mono text-sm font-bold leading-none transition hover:border-gray-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-bungie-blue"
+        className="flex items-center border border-bungie-border bg-bungie-dark/55 px-2 py-1 tabular-nums text-sm font-bold leading-none transition hover:border-gray-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-bungie-blue"
       >
         <span className="text-green-300">{summary.wins}</span>
         <span className="mx-1 text-gray-600">-</span>
