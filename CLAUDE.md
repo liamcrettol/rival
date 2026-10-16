@@ -1,12 +1,18 @@
 # CLAUDE.md - Rival
 
 Operating guide for Claude Code. Private repo; team-visible is fine. Never
-commit secret values (they live in Vercel / Supabase Vault).
+commit secret values (they live in Vercel and in mode-600 files on the
+database server).
+
+**Rival's database left Supabase on 2026-10-16.** It is now Postgres +
+PostgREST on AWS Lightsail at `https://db.rerolled.io`. Read
+[docs/INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md) before touching the
+database, env vars, migrations or cron jobs.
 
 The app: Destiny 2 Crucible match history and head-to-head records at
 https://rival.rerolled.io. Sister site of Rerolled (rerolled.io); the
 H2H pipeline was ported from that repo (see README for the reference docs).
-Stack: Next.js 15 (App Router) / React 19 / TypeScript / Tailwind / Supabase /
+Stack: Next.js 15 (App Router) / React 19 / TypeScript / Tailwind / PostgREST (supabase-js) /
 NextAuth v5 beta (custom Bungie provider) / Vercel.
 
 ## Workflow
@@ -50,20 +56,37 @@ NextAuth v5 beta (custom Bungie provider) / Vercel.
 
 ## Database
 
-- `database_size_bytes()` is checked by the sync-crucible cron. At 6.4 GB (80%
-  of the 8 GB included with Supabase Pro), it emits a `[database-capacity]
-  WARNING` error for the existing logging pipeline. Moved onto Pro on
-  2026-07-21; the threshold was 400 MB against the old 500 MB free-tier cap.
+- **Host:** AWS Lightsail `rival-db` (us-east-1, same AWS region as Vercel
+  `iad1`), running `supabase/postgres` 17.6 + PostgREST v14.17 behind Caddy at
+  `https://db.rerolled.io`. `supabase-js` and the `SUPABASE_*` env names are
+  unchanged: "Supabase" in this codebase now means that PostgREST server.
+  Full details, runbooks and open items: [docs/INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md).
+- The old Supabase project (`gnlnoojuudcjbifjfjyr`) is **retired** and kept
+  only as a fallback. `DATABASE_URL` and `scripts/db-query.mjs` still point at
+  it, so **don't use them**.
 - Plain SQL in `supabase/migrations/`, numbered sequentially, idempotent.
-- Run against the live DB with `node scripts/db-query.mjs <file>` (needs your
-  own `DATABASE_URL` in `.env.local`, session pooler string from the Supabase
-  dashboard). Don't leave migration files unapplied.
-- This is Rival's own Supabase project. Never point env vars at Rerolled's.
-- Emblem paths are stored once in `crucible_emblems` (029a). A trigger on
-  `crucible_match_players` interns `emblem_path` into `emblem_id` and nulls
-  the column, so writers keep sending `emblem_path`; readers resolve
-  `emblem_path` first, then `crucible_emblems.path`. Don't add new long
-  strings repeated per roster row (7M+ rows).
+  Apply on the Lightsail server with `docker compose exec db psql -U
+  supabase_admin` (see docs/INFRASTRUCTURE.md section 6). Test triggers and
+  other DDL in `begin; ... rollback;` first. Don't leave migration files
+  unapplied.
+- Never point env vars at Rerolled's Supabase except the existing
+  `REROLLED_SUPABASE_*` roster read.
+- `anon` and `authenticated` have no grants in `public`; only `service_role`
+  is used. Grant `service_role` on anything new.
+- Rival's client times out at 1.2 s by default. Check new or changed queries
+  with pg_stat_statements (role `service_role`) on the server.
+- `database_size_bytes()` is checked by the sync-crucible cron and warns at
+  6.4 GB (the old Supabase Pro threshold). The real limit is now the 60 GB
+  Lightsail disk; the threshold is due an update.
+- Emblem paths are stored once in `crucible_emblems`. The trigger
+  (migration 031) sets `emblem_id` on INSERT but keeps `emblem_path`, so an
+  `ON CONFLICT DO UPDATE SET emblem_path = excluded.emblem_path` still carries
+  it. On UPDATE it interns and nulls the path, and never erases an existing
+  emblem. Readers resolve `emblem_path` first, then `crucible_emblems.path`.
+  Don't add new long strings repeated per roster row (7M+ rows).
+- Membership and instance IDs stay **text**: they exceed 2^53 and would
+  corrupt as JSON numbers. `crucible_encounters` stays a real table (deriving
+  it live took 22 s).
 
 ## Testing
 
