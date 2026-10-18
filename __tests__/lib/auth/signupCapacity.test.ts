@@ -53,6 +53,23 @@ describe("shared signup capacity bridge", () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("fails closed with a distinct code, without retrying, when the endpoint host has moved", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: false,
+      status: 301,
+      headers: new Headers({ location: "https://rerolled.mida.tools/api/internal/rival/signup-capacity" }),
+      json: async () => { throw new Error("not json"); },
+    } as unknown as Response);
+
+    await expect(reserveSignupSlot("new-user")).rejects.toThrow("capacity_endpoint_redirected");
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect((global.fetch as jest.Mock).mock.calls[0][1]).toMatchObject({ redirect: "manual" });
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("redirected"), { status: 301, locationHost: "rerolled.mida.tools" });
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("secret");
+    errorSpy.mockRestore();
+  });
+
   it("retries a transient API failure, then succeeds", async () => {
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce(response(503, { status: "temporary_verification_failure", error: { code: "capacity_backend_unavailable" } }))

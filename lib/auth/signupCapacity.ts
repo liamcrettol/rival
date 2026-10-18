@@ -24,6 +24,15 @@ function isValidResult(body: unknown): body is SignupCapacityResult {
   );
 }
 
+function redirectHost(response: Response): string | null {
+  try {
+    const location = response.headers?.get("location");
+    return location ? new URL(location).host : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function reserveSignupSlot(userId: string): Promise<SignupCapacityResult> {
   const baseUrl = process.env.REROLLED_SYNC_BASE_URL;
   const secret = process.env.REROLLED_SYNC_SECRET;
@@ -40,11 +49,22 @@ export async function reserveSignupSlot(userId: string): Promise<SignupCapacityR
         },
         body: JSON.stringify({ userId }),
         cache: "no-store",
+        // A moved host answers 301 and fetch would replay the POST as a GET
+        // without the body or bearer token. Surface the redirect instead.
+        redirect: "manual",
         signal: AbortSignal.timeout(1_500),
       });
       const body = await response.json().catch(() => null);
       if (response.ok && isValidResult(body)) return body;
       if (response.status === 409 && isValidResult(body) && body.status === "capacity_reached") return body;
+
+      if (response.status >= 300 && response.status < 400) {
+        console.error("[signupCapacity] capacity endpoint redirected; REROLLED_SYNC_BASE_URL points at a moved host", {
+          status: response.status,
+          locationHost: redirectHost(response),
+        });
+        throw new SignupCapacityVerificationError("capacity_endpoint_redirected", false);
+      }
 
       const errorCode = response.status === 404
         ? "capacity_endpoint_unavailable"
@@ -94,6 +114,7 @@ export async function releaseSignupSlot(userId: string): Promise<void> {
       },
       body: JSON.stringify({ userId }),
       cache: "no-store",
+      redirect: "manual",
       signal: AbortSignal.timeout(1_500),
     });
     if (!response.ok) {
