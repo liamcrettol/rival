@@ -31,8 +31,8 @@ export async function GET(req: NextRequest) {
       );
     }
     const { q } = querySchema.parse(Object.fromEntries(req.nextUrl.searchParams));
-    const results = await searchOpponents({ viewerUserId: session.userId, query: q });
-    return NextResponse.json({ results });
+    const { results, bungieUnavailable } = await searchOpponents({ viewerUserId: session.userId, query: q });
+    return NextResponse.json({ results, bungieUnavailable });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Enter at least two characters" }, { status: 400 });
     const message = error instanceof Error ? error.message : "Unable to search players";

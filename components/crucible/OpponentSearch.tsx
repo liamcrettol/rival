@@ -53,6 +53,20 @@ function splitBungieName(name: string): [string, string] {
   return i > 0 && /^\d{3,4}$/.test(name.slice(i + 1)) ? [name.slice(0, i), name.slice(i)] : [name, ""];
 }
 
+// Underline the typed part of a suggestion so it is clear why it matched.
+function HighlightedName({ name, query }: { name: string; query: string }) {
+  const needle = query.trim().replace(/\s*#\s*/, "#").replace(/#$/, "").toLocaleLowerCase();
+  const at = needle ? name.toLocaleLowerCase().indexOf(needle) : -1;
+  if (at < 0) return <>{name}</>;
+  return (
+    <>
+      {name.slice(0, at)}
+      <span className="text-white underline decoration-white/40 underline-offset-2">{name.slice(at, at + needle.length)}</span>
+      {name.slice(at + needle.length)}
+    </>
+  );
+}
+
 function HeroName({ name }: { name: string }) {
   const [base, tag] = splitBungieName(name);
   return (
@@ -132,6 +146,7 @@ export default function OpponentSearch({ children }: { children?: React.ReactNod
   const [results, setResults] = useState<OpponentSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [bungieUnavailable, setBungieUnavailable] = useState(false);
   const [selected, setSelected] = useState<OpponentSearchResult | null>(null);
   const [detail, setDetail] = useState<DetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -167,7 +182,8 @@ export default function OpponentSearch({ children }: { children?: React.ReactNod
         const body = await response.json();
         if (!response.ok) throw new Error(body.error ?? "Search failed");
         setResults(body.results ?? []);
-        setActiveIndex(-1);
+        setBungieUnavailable(Boolean(body.bungieUnavailable));
+        setActiveIndex(body.results?.length ? 0 : -1);
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
           setSearchError(error instanceof Error ? error.message : "Search failed");
@@ -176,7 +192,7 @@ export default function OpponentSearch({ children }: { children?: React.ReactNod
       } finally {
         if (searchRequest.current === controller) setSearching(false);
       }
-    }, 350);
+    }, 250);
     return () => clearTimeout(timer);
   }, [query, selected]);
 
@@ -274,9 +290,9 @@ export default function OpponentSearch({ children }: { children?: React.ReactNod
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setActiveIndex((index) => Math.max(index - 1, 0));
-    } else if (event.key === "Enter" && activeIndex >= 0) {
+    } else if (event.key === "Enter") {
       event.preventDefault();
-      choose(results[activeIndex]);
+      choose(results[Math.max(activeIndex, 0)]);
     } else if (event.key === "Escape") {
       setResults([]);
     }
@@ -332,7 +348,7 @@ export default function OpponentSearch({ children }: { children?: React.ReactNod
               }
             }}
             onKeyDown={onKeyDown}
-            placeholder="Bungie Name#1234"
+            placeholder="Start typing a name, no #code needed"
             role="combobox"
             aria-autocomplete="list"
             aria-expanded={results.length > 0}
@@ -369,7 +385,7 @@ export default function OpponentSearch({ children }: { children?: React.ReactNod
                     </span>
                   )}
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-white">{result.displayName}</span>
+                    <span className="block truncate text-sm font-semibold text-gray-200"><HighlightedName name={result.displayName} query={query} /></span>
                     <span className="mt-0.5 block truncate text-xs text-gray-500">
                       {result.platformDisplayName && result.platformDisplayName !== result.displayName
                         ? `${result.platformDisplayName} | `
@@ -390,11 +406,18 @@ export default function OpponentSearch({ children }: { children?: React.ReactNod
                   )}
                 </button>
               ))}
+              {bungieUnavailable && (
+                <p className="px-3 py-2 text-xs text-gray-500">Bungie&apos;s player search is not answering, so these are only players you have met.</p>
+              )}
             </div>
           )}
         </div>
         {query.trim().length >= 2 && !searching && results.length === 0 && !selected && !searchError && (
-          <p className="mt-2 text-sm text-gray-500">No Bungie players found.</p>
+          <p className="mt-2 text-sm text-gray-500">
+            {bungieUnavailable
+              ? "Bungie's player search is not answering right now. Try again in a moment."
+              : "No players found with that name."}
+          </p>
         )}
         {searchError && <p className="mt-2 text-sm text-red-300">{searchError}</p>}
       </div>
