@@ -2,8 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import MatchHistoryPanel from "@/components/MatchHistoryPanel";
 import CrucibleHistorySync from "@/components/CrucibleHistorySync";
-import BrandMark from "@/components/BrandMark";
-import RerolledNavLink from "@/components/RerolledNavLink";
+import MidaHeader from "@/components/MidaHeader";
 import SignOutButton from "@/components/SignOutButton";
 import { getCrucibleMatchHistory } from "@/lib/crucible/matchHistory";
 import { queueCrucibleSync } from "@/lib/crucible/queueSync";
@@ -55,23 +54,9 @@ export default async function Dashboard() {
 
   return (
     <div className="min-h-screen bg-bungie-dark">
-      <header className="border-b border-bungie-border">
-        <div className="mx-auto flex h-16 max-w-[1240px] items-center gap-6 px-4 sm:px-8">
-          <span className="flex items-center gap-2.5">
-            <BrandMark className="h-6 w-6" />
-            <span className="font-wide text-[15px] font-bold">Rival</span>
-          </span>
-          <RerolledNavLink />
-          <div className="ml-auto flex items-center gap-3">
-            <span className="hidden text-sm font-semibold text-gray-300 sm:block">
-              {session.displayName}
-            </span>
-            <SignOutButton />
-          </div>
-        </div>
-      </header>
+      <MidaHeader tool="rival" href="/dashboard"><span className="hidden sm:inline">{session.displayName}</span><SignOutButton /></MidaHeader>
 
-      <main className="mx-auto max-w-[1240px] px-4 py-10 sm:px-8 sm:py-14">
+      <main className="mida-wrap pt-16 md:pt-24">
         <CrucibleHistorySync />
         <OpponentSearch>
           <MatchHistoryPanel matches={history.matches} syncStatus={history.syncStatus} needsReauth={history.needsReauth} />

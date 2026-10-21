@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import BrandMark from "@/components/BrandMark";
-import RerolledNavLink from "@/components/RerolledNavLink";
+import MidaHeader from "@/components/MidaHeader";
 import SignOutButton from "@/components/SignOutButton";
 import MatchHallOfFame from "@/components/crucible/MatchHallOfFame";
 
@@ -13,23 +12,9 @@ export default async function LeaderboardPage() {
 
   return (
     <div className="min-h-screen bg-bungie-dark">
-      <header className="border-b border-bungie-border">
-        <div className="mx-auto flex h-[4.5rem] max-w-7xl items-center gap-6 px-4 sm:px-6">
-          <a href="/dashboard" className="flex items-center gap-2.5">
-            <BrandMark className="h-7 w-7" />
-            <span className="text-xl font-bold uppercase tracking-[0.12em]">Rival</span>
-          </a>
-          <RerolledNavLink />
-          <div className="ml-auto flex items-center gap-3">
-            <span className="hidden text-sm font-semibold text-gray-300 sm:block">
-              {session.displayName}
-            </span>
-            <SignOutButton />
-          </div>
-        </div>
-      </header>
+      <MidaHeader tool="rival" href="/dashboard"><span className="hidden sm:inline">{session.displayName}</span><SignOutButton /></MidaHeader>
 
-      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+      <main className="mida-wrap pt-16 md:pt-24">
         <div className="mb-6">
           <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
             Match hall of fame
