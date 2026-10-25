@@ -25,6 +25,22 @@ describe("shared signup capacity bridge", () => {
     global.fetch = jest.fn() as unknown as typeof fetch;
   });
 
+  it("fails closed with a distinct code, without retrying, when the endpoint has moved (redirect)", async () => {
+    const errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: false,
+      status: 301,
+      headers: new Headers({ location: "https://rerolled.example/api/internal/rival/signup-capacity?x=1" }),
+      json: async () => null,
+    } as unknown as Response);
+
+    await expect(reserveSignupSlot("new-user")).rejects.toThrow("capacity_endpoint_redirected");
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect((global.fetch as jest.Mock).mock.calls[0][1]).toMatchObject({ redirect: "manual" });
+    expect(errSpy).toHaveBeenCalledWith(expect.any(String), { status: 301, locationHost: "rerolled.example" });
+    errSpy.mockRestore();
+  });
+
   it("accepts an available response", async () => {
     (global.fetch as jest.Mock).mockResolvedValue(response(200, available));
 

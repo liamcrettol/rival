@@ -12,6 +12,16 @@ class SignupCapacityVerificationError extends Error {
   }
 }
 
+// Host only: the full Location can carry paths we don't need in logs.
+function redirectHost(response: Response): string | null {
+  try {
+    const location = response.headers.get("location");
+    return location ? new URL(location, "https://invalid.local").host : null;
+  } catch {
+    return null;
+  }
+}
+
 function isValidResult(body: unknown): body is SignupCapacityResult {
   if (!body || typeof body !== "object") return false;
   const value = body as Record<string, unknown>;
@@ -40,8 +50,20 @@ export async function reserveSignupSlot(userId: string): Promise<SignupCapacityR
         },
         body: JSON.stringify({ userId }),
         cache: "no-store",
+        // Never follow redirects: fetch turns a redirected POST into a GET
+        // and drops the Authorization header, which would surface as a
+        // misleading "malformed response". A redirect means
+        // REROLLED_SYNC_BASE_URL points at a moved host and must be updated.
+        redirect: "manual",
         signal: AbortSignal.timeout(1_500),
       });
+      if (response.status >= 300 && response.status < 400) {
+        console.error("[signupCapacity] capacity endpoint redirected; update REROLLED_SYNC_BASE_URL", {
+          status: response.status,
+          locationHost: redirectHost(response),
+        });
+        throw new SignupCapacityVerificationError("capacity_endpoint_redirected", false);
+      }
       const body = await response.json().catch(() => null);
       if (response.ok && isValidResult(body)) return body;
       if (response.status === 409 && isValidResult(body) && body.status === "capacity_reached") return body;
@@ -94,8 +116,17 @@ export async function releaseSignupSlot(userId: string): Promise<void> {
       },
       body: JSON.stringify({ userId }),
       cache: "no-store",
+      redirect: "manual",
       signal: AbortSignal.timeout(1_500),
     });
+    if (response.status >= 300 && response.status < 400) {
+      console.error("[signupCapacity] release endpoint redirected; update REROLLED_SYNC_BASE_URL", {
+        userId,
+        status: response.status,
+        locationHost: redirectHost(response),
+      });
+      return;
+    }
     if (!response.ok) {
       // A non-2xx here (e.g. 401 from a secret rotated out of sync, or a 5xx)
       // means the slot on Rerolled's ledger was never actually freed, even
