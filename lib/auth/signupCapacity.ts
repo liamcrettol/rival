@@ -6,6 +6,19 @@ export type SignupCapacityResult = {
   max_users: number;
 };
 
+function isRedirect(status: number): boolean {
+  return status >= 300 && status < 400;
+}
+
+// Host only: never log paths, query strings or credentials.
+function safeHost(url: string | undefined): string {
+  try {
+    return url ? new URL(url).host : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 class SignupCapacityVerificationError extends Error {
   constructor(public readonly code: string, public readonly retryable: boolean) {
     super(code);
@@ -40,8 +53,20 @@ export async function reserveSignupSlot(userId: string): Promise<SignupCapacityR
         },
         body: JSON.stringify({ userId }),
         cache: "no-store",
+        // fetch turns a redirected POST into a GET and drops Authorization on
+        // a cross-origin hop, so a moved base URL would otherwise surface as a
+        // misleading 405/401. Handle redirects explicitly instead.
+        redirect: "manual",
         signal: AbortSignal.timeout(1_500),
       });
+      if (isRedirect(response.status)) {
+        console.error("[signupCapacity] capacity endpoint redirected; update REROLLED_SYNC_BASE_URL to the canonical host", {
+          status: response.status,
+          from: safeHost(baseUrl),
+          to: safeHost(response.headers?.get?.("location") ?? undefined),
+        });
+        throw new SignupCapacityVerificationError("capacity_endpoint_redirected", false);
+      }
       const body = await response.json().catch(() => null);
       if (response.ok && isValidResult(body)) return body;
       if (response.status === 409 && isValidResult(body) && body.status === "capacity_reached") return body;
@@ -94,8 +119,18 @@ export async function releaseSignupSlot(userId: string): Promise<void> {
       },
       body: JSON.stringify({ userId }),
       cache: "no-store",
+      redirect: "manual",
       signal: AbortSignal.timeout(1_500),
     });
+    if (isRedirect(response.status)) {
+      console.error("[signupCapacity] release endpoint redirected; slot not released. Update REROLLED_SYNC_BASE_URL", {
+        userId,
+        status: response.status,
+        from: safeHost(baseUrl),
+        to: safeHost(response.headers?.get?.("location") ?? undefined),
+      });
+      return;
+    }
     if (!response.ok) {
       // A non-2xx here (e.g. 401 from a secret rotated out of sync, or a 5xx)
       // means the slot on Rerolled's ledger was never actually freed, even
