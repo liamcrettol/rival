@@ -124,12 +124,20 @@ export async function GET(req: NextRequest) {
 
   // Fallback for flows that started before the cookie-based state rollout.
   if (!stateValid) {
-    const { data: storedState } = await adminSupabase
-      .from("oauth_states")
-      .select("state, return_to")
-      .eq("state", state)
-      .gt("expires_at", new Date().toISOString())
-      .single();
+    // A thrown lookup (network blip, timeout) is treated as an invalid state
+    // and redirected gracefully instead of surfacing a raw 500.
+    let storedState: { state: string; return_to: string | null } | null = null;
+    try {
+      const result = await adminSupabase
+        .from("oauth_states")
+        .select("state, return_to")
+        .eq("state", state)
+        .gt("expires_at", new Date().toISOString())
+        .single();
+      storedState = result.data;
+    } catch (e) {
+      console.error("[bungie/callback] legacy oauth_states lookup threw:", e instanceof Error ? e.message : String(e));
+    }
 
     if (!storedState) {
       const response = errRedirect("state_mismatch");

@@ -430,3 +430,19 @@ describe("signup capacity check for returning users (#7)", () => {
     expect(mockReleaseSignupSlot).toHaveBeenCalledWith("user-1");
   });
 });
+
+// #48 - the legacy oauth_states fallback lookup must never crash the callback
+// into a raw 500; a thrown/failed lookup is just an invalid state.
+it("redirects to state_mismatch instead of throwing when the legacy oauth_states lookup throws (#48)", async () => {
+  jest.spyOn(console, "error").mockImplementation(() => {});
+  mockFrom.mockReturnValue({
+    select: jest.fn().mockReturnThis(),
+    eq: jest.fn().mockReturnThis(),
+    gt: jest.fn().mockReturnThis(),
+    single: jest.fn().mockRejectedValue(new Error("fetch failed")),
+  });
+  const res = await GET(
+    new NextRequest("https://test.app/api/auth/bungie/callback?code=abc&state=no-cookie-state"),
+  );
+  expect(res.headers.get("location")).toBe("https://test.app/auth/error?error=state_mismatch");
+});
