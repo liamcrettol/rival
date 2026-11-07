@@ -40,8 +40,14 @@ export async function reserveSignupSlot(userId: string): Promise<SignupCapacityR
         },
         body: JSON.stringify({ userId }),
         cache: "no-store",
+        // Never follow redirects: fetch downgrades a redirected POST to GET,
+        // which would hide a stale REROLLED_SYNC_BASE_URL behind a 405.
+        redirect: "manual",
         signal: AbortSignal.timeout(1_500),
       });
+      if (response.status >= 300 && response.status < 400) {
+        throw new SignupCapacityVerificationError("capacity_endpoint_redirected", false);
+      }
       const body = await response.json().catch(() => null);
       if (response.ok && isValidResult(body)) return body;
       if (response.status === 409 && isValidResult(body) && body.status === "capacity_reached") return body;

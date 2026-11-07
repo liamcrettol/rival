@@ -32,6 +32,18 @@ describe("shared signup capacity bridge", () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("reports a redirected capacity endpoint distinctly instead of a generic malformed response", async () => {
+    // A 301 on a POST is downgraded to GET by fetch and then 405s, which used
+    // to surface as "malformed_capacity_response". Redirects are now not
+    // followed and are named explicitly so a stale REROLLED_SYNC_BASE_URL is
+    // diagnosable from the logs. It still fails closed (never allows signup).
+    (global.fetch as jest.Mock).mockResolvedValue(response(301, null));
+
+    await expect(reserveSignupSlot("new-user")).rejects.toThrow("capacity_endpoint_redirected");
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect((global.fetch as jest.Mock).mock.calls[0][1]).toMatchObject({ redirect: "manual" });
+  });
+
   it("accepts an already-registered response", async () => {
     const existing = { ...available, status: "already_registered", already_registered: true };
     (global.fetch as jest.Mock).mockResolvedValue(response(200, existing));
